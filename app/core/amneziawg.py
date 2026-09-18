@@ -120,8 +120,6 @@ class AmneziaWGConfig(dict):
             elif name in _BOOLEAN_FIELDS:
                 if not isinstance(value, bool):
                     raise ValueError(f"AWG {name} requires a boolean")
-                if name == "disable_cookies" and value:
-                    raise ValueError("disabling cookie protection is prohibited")
             else:
                 raise ValueError(f"unsupported AWG field {name!r}")
             normalized[name] = value
