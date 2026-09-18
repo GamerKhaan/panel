@@ -4,7 +4,7 @@ import logging
 import os
 from collections import defaultdict
 from typing import Any
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from sqlalchemy import select
@@ -527,12 +527,14 @@ async def test_record_user_usages_skips_when_already_running(monkeypatch: pytest
     impl = AsyncMock()
     monkeypatch.setattr(record_usages, "_record_user_usages_impl", impl)
     record_usages._user_usage_running = True
-    caplog.set_level(logging.WARNING)
-    await record_usages.record_user_usages()
+    with patch.object(record_usages.logger, "warning") as warning:
+        await record_usages.record_user_usages()
 
     impl.assert_not_awaited()
-    assert "JOB_RECORD_USER_USAGES_INTERVAL" in caplog.text
-    assert "UVICORN_WORKERS" in caplog.text
+    warning.assert_called_once()
+    logged = " ".join(str(value) for value in warning.call_args.args)
+    assert "JOB_RECORD_USER_USAGES_INTERVAL" in logged
+    assert "UVICORN_WORKERS" in logged
 
 
 @pytest.mark.asyncio
@@ -540,12 +542,14 @@ async def test_record_node_usages_skips_when_already_running(monkeypatch: pytest
     impl = AsyncMock()
     monkeypatch.setattr(record_usages, "_record_node_usages_impl", impl)
     record_usages._node_usage_running = True
-    caplog.set_level(logging.WARNING)
-    await record_usages.record_node_usages()
+    with patch.object(record_usages.logger, "warning") as warning:
+        await record_usages.record_node_usages()
 
     impl.assert_not_awaited()
-    assert "JOB_RECORD_NODE_USAGES_INTERVAL" in caplog.text
-    assert "UVICORN_WORKERS" in caplog.text
+    warning.assert_called_once()
+    logged = " ".join(str(value) for value in warning.call_args.args)
+    assert "JOB_RECORD_NODE_USAGES_INTERVAL" in logged
+    assert "UVICORN_WORKERS" in logged
 
 
 @pytest.mark.asyncio
@@ -571,12 +575,13 @@ async def test_record_user_usages_warns_when_slower_than_interval(monkeypatch: p
     monkeypatch.setattr(record_usages.time, "monotonic", lambda: clock["t"])
     monkeypatch.setattr(record_usages, "_record_user_usages_impl", impl)
     monkeypatch.setattr(record_usages.job_settings, "record_user_usages_interval", 10)
-    caplog.set_level(logging.WARNING)
+    with patch.object(record_usages.logger, "warning") as warning:
+        await record_usages.record_user_usages()
 
-    await record_usages.record_user_usages()
-
-    assert "exceeds the 10s interval" in caplog.text
-    assert "UVICORN_WORKERS" in caplog.text
+    warning.assert_called_once()
+    logged = " ".join(str(value) for value in warning.call_args.args)
+    assert "exceeds the %ss interval" in logged
+    assert "UVICORN_WORKERS" in logged
 
 
 @pytest.mark.asyncio

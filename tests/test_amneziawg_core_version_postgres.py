@@ -105,7 +105,7 @@ async def test_connected_status_preserves_complete_awg_version_and_downgrade_is_
         match="Refusing to narrow nodes.xray_version to 32 characters while longer values exist",
     ):
         await asyncio.to_thread(_migrate, sync_url, downgrade, "pgawg0001")
-    assert _migration_head(sync_url) == "pgawg0002"
+    assert _migration_head(sync_url) == "pgawg0003"
 
     engine = create_async_engine(async_url)
     sessions = async_sessionmaker(engine, expire_on_commit=False)
@@ -122,5 +122,5 @@ async def test_connected_status_preserves_complete_awg_version_and_downgrade_is_
     assert _column_contract(sync_url) == ("VARCHAR(32)", 32)
 
     await asyncio.to_thread(_migrate, sync_url, upgrade, "head")
-    assert _migration_head(sync_url) == "pgawg0002"
+    assert _migration_head(sync_url) == "pgawg0003"
     assert _column_contract(sync_url) == ("TEXT", None)

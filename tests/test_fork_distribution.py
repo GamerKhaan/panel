@@ -60,6 +60,13 @@ class ForkDistributionTests(unittest.TestCase):
         self.assertGreaterEqual(workflow.count(BRIDGE), 5)
         self.assertGreaterEqual(workflow.count("../m2-bridge-source"), 5)
 
+    def test_awg_core_type_migration_covers_all_supported_database_families(self):
+        migration = (ROOT / "app/db/migrations/versions/pgawg0001_add_coretype.py").read_text()
+        self.assertIn('dialect == "postgresql"', migration)
+        self.assertIn('dialect in {"mysql", "mariadb"}', migration)
+        self.assertIn('dialect == "sqlite"', migration)
+        self.assertIn("batch_alter_table", migration)
+
     def test_dashboard_runtime_has_no_pasarguard_github_control_plane(self):
         forbidden = (
             "https://github.com/PasarGuard",
