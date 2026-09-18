@@ -22,7 +22,7 @@ export function AmneziaWGAdvancedForm() {
     <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
       {AWG_INTEGER_FIELDS.map(key => <div key={key} className="space-y-2"><Label>{title(key)}</Label><Input dir="ltr" inputMode="numeric" value={String(draft.awg[key] ?? '')} onChange={e => setAwg(key, e.target.value === '' ? '' : Number(e.target.value))} /></div>)}
       {AWG_RANGE_FIELDS.map(key => <div key={key} className="space-y-2"><Label>{title(key)}</Label><Input dir="ltr" value={String(draft.awg[key] ?? '')} onChange={e => setAwg(key, e.target.value)} /></div>)}
-      {AWG_BOOLEAN_FIELDS.map(key => <div key={key} className="flex items-center justify-between gap-3 rounded-md border p-3"><Label>{title(key)}</Label><Switch checked={draft.awg[key] === true} onCheckedChange={value => setAwg(key, value)} disabled={key === 'disable_cookies'} /></div>)}
+      {AWG_BOOLEAN_FIELDS.map(key => <div key={key} className="flex items-center justify-between gap-3 rounded-md border p-3"><Label>{title(key)}</Label><Switch checked={draft.awg[key] === true} onCheckedChange={value => setAwg(key, value)} /></div>)}
     </div>
   </section>
 }

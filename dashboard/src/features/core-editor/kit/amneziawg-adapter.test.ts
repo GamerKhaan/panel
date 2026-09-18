@@ -33,6 +33,23 @@ describe('AmneziaWG form adapter', () => {
     expect(regenerated.publicKey).not.toBe(pair.publicKey)
   })
 
+  it('round-trips disable_cookies false → true → false losslessly', () => {
+    const draft = createNewAmneziaWGDraft()
+    expect(draft.awg.disable_cookies).toBe(false)
+
+    const enabled = { ...draft, awg: { ...draft.awg, disable_cookies: true } }
+    const enabledConfig = amneziaWGDraftToConfig(enabled)
+    expect((enabledConfig.awg as Record<string, unknown>).disable_cookies).toBe(true)
+
+    const parsed = amneziaWGConfigToDraft(enabledConfig)
+    expect(parsed.ok).toBe(true)
+    if (!parsed.ok) return
+    expect(parsed.draft.awg.disable_cookies).toBe(true)
+
+    const disabled = { ...parsed.draft, awg: { ...parsed.draft.awg, disable_cookies: false } }
+    expect((amneziaWGDraftToConfig(disabled).awg as Record<string, unknown>).disable_cookies).toBe(false)
+  })
+
   it('refuses an unsupported version instead of rewriting it', () => {
     expect(amneziaWGConfigToDraft({ schema_version: 2, implementation: 'future', awg: {} }).ok).toBe(false)
   })
