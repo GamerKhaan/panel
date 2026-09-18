@@ -15,7 +15,7 @@ from app.db.crud.hwid import (
     register_user_hwid,
 )
 from app.db.crud.user import get_user_usages, user_sub_update
-from app.db.models import User
+from app.db.models import User, UserStatus
 from app.models.admin import AdminDetails
 from app.models.settings import Application, ConfigFormat, HWIDSettings, SubRule, Subscription as SubSettings
 from app.models.stats import UserUsageStatsList
@@ -114,6 +114,8 @@ class SubscriptionOperation(BaseOperation):
     async def validated_user(db_user: User) -> UsersResponseWithInbounds:
         user = UsersResponseWithInbounds.model_validate(db_user.__dict__)
         user.inbounds = await db_user.inbounds()
+        if db_user.status in {UserStatus.disabled, UserStatus.limited, UserStatus.expired}:
+            user.inbounds = []
         user.expire = db_user.expire
         user.lifetime_used_traffic = db_user.lifetime_used_traffic
 

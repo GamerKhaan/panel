@@ -944,6 +944,59 @@ def test_users_get_filters_by_data_limit_reset_strategy(access_token):
         cleanup_groups(access_token, core, groups)
 
 
+def test_inactive_user_raw_subscription_omits_proxy_links(access_token):
+    core, groups = setup_groups(access_token, 1)
+    hosts = create_hosts_for_inbounds(access_token)
+    user = create_user(
+        access_token,
+        group_ids=[group["id"] for group in groups],
+        payload={"username": unique_name("test_inactive_raw_sub")},
+    )
+    on_hold_user = create_user(
+        access_token,
+        group_ids=[group["id"] for group in groups],
+        payload={
+            "username": unique_name("test_on_hold_raw_sub"),
+            "status": "on_hold",
+            "on_hold_expire_duration": 3600,
+        },
+    )
+    try:
+        raw_url = f"{user['subscription_url']}/raw"
+        active_raw = client.get(raw_url)
+        assert active_raw.status_code == status.HTTP_200_OK
+        assert active_raw.json()["body"]["links"]
+
+        on_hold_raw = client.get(f"{on_hold_user['subscription_url']}/raw")
+        assert on_hold_raw.status_code == status.HTTP_200_OK
+        assert on_hold_raw.json()["body"]["links"]
+
+        leaked_states = []
+        state_changes = [
+            ("disabled", {"status": "disabled"}),
+            ("expired", {"status": "active", "expire": "2000-01-01T00:00:00+00:00"}),
+        ]
+        for label, payload in state_changes:
+            update_response = client.put(
+                f"/api/user/by-id/{user['id']}",
+                headers=auth_headers(access_token),
+                json=payload,
+            )
+            assert update_response.status_code == status.HTTP_200_OK
+            raw_response = client.get(raw_url)
+            assert raw_response.status_code == status.HTTP_200_OK
+            if raw_response.json()["body"]["links"]:
+                leaked_states.append(label)
+
+        assert leaked_states == []
+    finally:
+        delete_user(access_token, user["username"])
+        delete_user(access_token, on_hold_user["username"])
+        for host in hosts:
+            client.delete(f"/api/host/{host['id']}", headers=auth_headers(access_token))
+        cleanup_groups(access_token, core, groups)
+
+
 def test_user_subscriptions(access_token):
     """Test that the user subscriptions route is accessible."""
     user_subscription_formats = [
