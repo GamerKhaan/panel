@@ -1,4 +1,5 @@
 import json
+import re
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -12,6 +13,11 @@ from cli import node as node_cli
 from cli.main import app
 
 runner = CliRunner()
+
+
+@pytest.fixture(autouse=True)
+def _run_pairing_tests_as_root(monkeypatch):
+    monkeypatch.setattr(node_cli.os, "geteuid", lambda: 0)
 
 
 def make_certificate() -> str:
@@ -34,9 +40,10 @@ def test_pair_node_command_exposes_file_only_interface():
     result = runner.invoke(app, ["pair-node", "--help"])
 
     assert result.exit_code == 0, result.output
-    assert "--file" in result.output
-    assert "API key" not in result.output
-    assert "server-ca" not in result.output
+    output = re.sub(r"\x1b\[[0-9;]*m", "", result.output)
+    assert "--file" in output
+    assert "API key" not in output
+    assert "server-ca" not in output
 
 
 def test_pair_node_rejects_group_or_world_readable_pairing_file(tmp_path):
