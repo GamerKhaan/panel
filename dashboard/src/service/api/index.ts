@@ -2205,6 +2205,7 @@ export interface SubscriptionUserResponse {
 
 export interface SystemResourceStats {
   version: string;
+  distribution_version: string;
   uptime_seconds: number;
   mem_total?: number | null;
   mem_used?: number | null;
@@ -2225,6 +2226,7 @@ export interface SystemStats {
   incoming_bandwidth: number;
   outgoing_bandwidth: number;
   version: string;
+  distribution_version: string;
   uptime_seconds: number;
   mem_total?: number | null;
   mem_used?: number | null;

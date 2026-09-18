@@ -11,7 +11,10 @@ export function useSystemVersion(options: UseSystemVersionOptions = {}) {
   const { data, isLoading, isError } = useGetSystemResourceStats({
     query: {
       enabled,
-      select: stats => stats?.version ?? null,
+      select: stats => ({
+        distributionVersion: stats?.distribution_version ?? null,
+        productVersion: stats?.version ?? null,
+      }),
       staleTime: SYSTEM_VERSION_STALE_TIME,
       gcTime: SYSTEM_VERSION_STALE_TIME * 2,
       refetchOnWindowFocus: false,
@@ -22,7 +25,8 @@ export function useSystemVersion(options: UseSystemVersionOptions = {}) {
   })
 
   return {
-    currentVersion: enabled ? (data ?? null) : null,
+    currentVersion: enabled ? (data?.distributionVersion ?? null) : null,
+    productVersion: enabled ? (data?.productVersion ?? null) : null,
     isLoading: enabled ? isLoading : false,
     isError: enabled ? isError : false,
   }

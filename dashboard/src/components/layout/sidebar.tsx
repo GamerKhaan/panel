@@ -135,7 +135,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const { setOpenMobile, openMobile, state, isMobile, toggleSidebar } = useSidebar()
   const { resolvedTheme } = useTheme()
   const [showCollapseButton, setShowCollapseButton] = useState(false)
-  const normalizedVersion = canReadSystem && systemVersion ? systemVersion.replace(/[^0-9.]/g, '') : null
+  const normalizedVersion = canReadSystem && systemVersion ? systemVersion.trim().replace(/^v/i, '') : null
   const displayVersion = canReadSystem && systemVersion ? `(v${systemVersion})` : ''
   const { hasUpdate } = useVersionCheck(normalizedVersion, { enabled: canReadSystem })
   const touchStartX = useRef<number | null>(null)

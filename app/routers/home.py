@@ -2,6 +2,7 @@ from fastapi import APIRouter, status
 from fastapi.responses import HTMLResponse
 
 from app.templates import render_template
+from app.version import __distribution_version__, __version__
 from config import dashboard_settings, template_settings
 
 DASHBOARD_ROUTE = dashboard_settings.path.rstrip("/")
@@ -17,6 +18,7 @@ async def base():
 async def health():
     return {
         "status": "ok",
-        "managed_release": "v5.4.1-awg31.2",
+        "product_version": __version__,
+        "managed_release": f"v{__distribution_version__}",
         "schema_head": "pgawg0003",
     }

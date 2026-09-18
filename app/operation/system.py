@@ -1,7 +1,7 @@
 import asyncio
 from datetime import timedelta
 
-from app import __version__
+from app import __distribution_version__, __version__
 from app.core.manager import core_manager
 from app.db import AsyncSession
 from app.db.crud.admin import build_admin_details, get_admin
@@ -29,6 +29,7 @@ class SystemOperation(BaseOperation):
 
         return SystemResourceStats(
             version=__version__,
+            distribution_version=__distribution_version__,
             uptime_seconds=uptime_seconds,
             mem_total=mem.total,
             mem_used=mem.used,
