@@ -206,6 +206,79 @@ async def test_pair_node_waits_for_async_reconnect(monkeypatch, tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_pair_node_polls_fresh_sessions_until_connected(monkeypatch, tmp_path):
+    bundle = type(
+        "Bundle",
+        (),
+        {"api_key": "123e4567-e89b-12d3-a456-426614174000", "server_ca": make_certificate()},
+    )()
+    monkeypatch.setattr(node_cli, "_load_pairing_bundle", lambda _: bundle)
+
+    write_db = object()
+    poll_error_db = object()
+    poll_connected_db = object()
+    db_contexts = iter([write_db, poll_error_db, poll_connected_db])
+    db_node = type(
+        "Node",
+        (),
+        {
+            "id": 7,
+            "status": type("Status", (), {"value": "error"})(),
+            "api_key": "223e4567-e89b-12d3-a456-426614174001",
+            "server_ca": make_certificate(),
+        },
+    )()
+    modifies = []
+
+    class FakeDB:
+        def __init__(self):
+            self.db = next(db_contexts)
+
+        async def __aenter__(self):
+            return self.db
+
+        async def __aexit__(self, *_):
+            return False
+
+    async def fake_get_node(_db, node_id, **_kwargs):
+        assert node_id == 7
+        if _db is write_db:
+            return db_node
+        state = "error" if _db is poll_error_db else "connected"
+        return type("Node", (), {"status": type("Status", (), {"value": state})()})()
+
+    async def fake_modify(_db, node, modify):
+        modifies.append(modify.api_key)
+        node.api_key = modify.api_key
+        node.server_ca = modify.server_ca
+        node.status = type("Status", (), {"value": "connecting"})()
+        return node
+
+    class FakeNodeOperation:
+        def __init__(self, operator_type):
+            pass
+
+        async def connect_single_node(self, _db, node_id, *, force_start=False):
+            assert _db is write_db
+            assert node_id == 7
+            assert force_start is True
+
+    async def no_sleep(_seconds):
+        return None
+
+    monkeypatch.setattr(node_cli, "GetDB", FakeDB)
+    monkeypatch.setattr(node_cli, "get_node_by_id", fake_get_node)
+    monkeypatch.setattr(node_cli, "crud_modify_node", fake_modify)
+    monkeypatch.setattr(node_cli, "NodeOperation", FakeNodeOperation)
+    monkeypatch.setattr(node_cli.asyncio, "sleep", no_sleep)
+
+    status = await node_cli._pair_node(7, tmp_path / "unused.json")
+
+    assert status == "connected"
+    assert modifies == [bundle.api_key]
+
+
+@pytest.mark.asyncio
 async def test_pair_node_restores_previous_credentials_when_reconnect_fails(monkeypatch, tmp_path):
     new_certificate = make_certificate()
     old_certificate = make_certificate()
@@ -253,10 +326,14 @@ async def test_pair_node_restores_previous_credentials_when_reconnect_fails(monk
         async def connect_single_node(self, _db, node_id, *, force_start=False):
             reconnects.append((node_id, force_start))
 
+    async def no_sleep(_seconds):
+        return None
+
     monkeypatch.setattr(node_cli, "GetDB", FakeDB)
     monkeypatch.setattr(node_cli, "get_node_by_id", fake_get_node)
     monkeypatch.setattr(node_cli, "crud_modify_node", fake_modify)
     monkeypatch.setattr(node_cli, "NodeOperation", FakeNodeOperation)
+    monkeypatch.setattr(node_cli.asyncio, "sleep", no_sleep)
 
     with pytest.raises(ValueError, match="reconnect failed"):
         await node_cli._pair_node(7, tmp_path / "unused.json")
@@ -316,10 +393,14 @@ async def test_pair_node_reports_rollback_failure_without_exposing_secrets(monke
         async def connect_single_node(self, _db, node_id, *, force_start=False):
             return None
 
+    async def no_sleep(_seconds):
+        return None
+
     monkeypatch.setattr(node_cli, "GetDB", FakeDB)
     monkeypatch.setattr(node_cli, "get_node_by_id", fake_get_node)
     monkeypatch.setattr(node_cli, "crud_modify_node", fake_modify)
     monkeypatch.setattr(node_cli, "NodeOperation", FakeNodeOperation)
+    monkeypatch.setattr(node_cli.asyncio, "sleep", no_sleep)
 
     with pytest.raises(ValueError) as error:
         await node_cli._pair_node(7, tmp_path / "unused.json")

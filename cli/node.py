@@ -68,17 +68,22 @@ def _load_pairing_bundle(pairing_file: Path) -> NodePairingBundle:
         raise ValueError(f"Invalid pairing file fields: {field_list}") from None
 
 
-async def _wait_for_reconnect(db, node_id: int):
-    refreshed = None
+async def _wait_for_reconnect(node_id: int) -> str:
+    status = "connecting"
     for attempt in range(30):
-        refreshed = await get_node_by_id(db, node_id, load_usage_logs=False)
-        if refreshed is None:
-            raise ValueError(f"Node {node_id} not found after pairing")
-        if refreshed.status.value in {"connected", "error", "disabled", "limited"}:
-            return refreshed
+        async with GetDB() as poll_db:
+            refreshed = await get_node_by_id(poll_db, node_id, load_usage_logs=False)
+            if refreshed is None:
+                raise ValueError(f"Node {node_id} not found after pairing")
+            status = refreshed.status.value
+
+        if status == "connected":
+            return status
+        if status in {"disabled", "limited"}:
+            return status
         if attempt < 29:
             await asyncio.sleep(1)
-    return refreshed
+    return status
 
 
 async def _restore_pairing(db, node_id: int, db_node, original: NodeModify, operation: NodeOperation) -> bool:
@@ -104,17 +109,17 @@ async def _pair_node(node_id: int, pairing_file: Path) -> str:
         operation = NodeOperation(OperatorType.CLI)
         try:
             await operation.connect_single_node(db, node_id, force_start=True)
-            refreshed = await _wait_for_reconnect(db, node_id)
+            status = await _wait_for_reconnect(node_id)
         except Exception:
             rollback_ok = await _restore_pairing(db, node_id, db_node, original, operation)
             if not rollback_ok:
                 raise ValueError(f"Node {node_id} pairing reconnect failed and rollback failed") from None
             raise ValueError(f"Node {node_id} pairing updated but reconnect failed") from None
 
-        if refreshed.status.value == "connected":
-            return refreshed.status.value
+        if status == "connected":
+            return status
 
-        rollback_ok = await _restore_pairing(db, node_id, refreshed, original, operation)
+        rollback_ok = await _restore_pairing(db, node_id, db_node, original, operation)
         if not rollback_ok:
             raise ValueError(f"Node {node_id} pairing reconnect failed and rollback failed")
         raise ValueError(f"Node {node_id} pairing updated but reconnect failed")
