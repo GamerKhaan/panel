@@ -17,6 +17,6 @@ async def base():
 async def health():
     return {
         "status": "ok",
-        "managed_release": "v5.4.1-awg31-rc.3",
+        "managed_release": "v5.4.1-awg31-rc.4",
         "schema_head": "pgawg0003",
     }
