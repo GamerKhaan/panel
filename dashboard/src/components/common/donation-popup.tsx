@@ -266,7 +266,7 @@ export default function DonationPopup() {
   }
 
   const handleGitHub = () => {
-    window.open('https://github.com/PasarGuard', '_blank', 'noopener,noreferrer')
+    window.open('https://github.com/GamerKhaan', '_blank', 'noopener,noreferrer')
     handleClose()
   }
 

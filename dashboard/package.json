@@ -17,8 +17,8 @@
     "@hookform/resolvers": "^5.9.0",
     "@monaco-editor/react": "^4.7.0",
     "@noble/post-quantum": "^0.5.4",
-    "@pasarguard/core-kit": "0.2.9",
-    "@pasarguard/xray-config-kit": "^0.3.8",
+    "@pasarguard/core-kit": "https://codeload.github.com/GamerKhaan/core-kit/tar.gz/95677b42c599ebc2da02d2a8f0c2511695a07e14",
+    "@pasarguard/xray-config-kit": "https://codeload.github.com/GamerKhaan/xray-config-kit/tar.gz/fc238d5306a31fb8d6b95d9c774bbf1ba66a25d2",
     "@radix-ui/react-accordion": "^1.2.20",
     "@radix-ui/react-alert-dialog": "^1.1.23",
     "@radix-ui/react-avatar": "^1.2.6",
@@ -87,7 +87,8 @@
     "uuid": "^11.1.1",
     "vaul": "^1.1.2",
     "zod": "^3.25.76",
-    "zustand": "^5.0.15"
+    "zustand": "^5.0.15",
+    "@pasarguard/wireguard-config-kit": "https://codeload.github.com/GamerKhaan/wireguard-config-kit/tar.gz/f68b93cfe006e865b2eb7a429339796e234b4703"
   },
   "devDependencies": {
     "@react-router/dev": "^7.18.2",
