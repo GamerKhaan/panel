@@ -130,28 +130,30 @@ PasarGuard is a user-friendly, feature-rich, and reliable proxy management tool.
 
 **TimescaleDB (Recommended):**
 ```bash
-sudo bash -c "$(curl -fsSL https://github.com/PasarGuard/scripts/raw/main/pasarguard.sh)" @ install --database timescaledb
+sudo bash -c "$(curl -fsSL https://github.com/GamerKhaan/scripts/raw/main/pasarguard.sh)" @ install --database timescaledb
 ```
 
 **SQLite:**
 ```bash
-sudo bash -c "$(curl -fsSL https://github.com/PasarGuard/scripts/raw/main/pasarguard.sh)" @ install
+sudo bash -c "$(curl -fsSL https://github.com/GamerKhaan/scripts/raw/main/pasarguard.sh)" @ install
 ```
 
 **MySQL:**
 ```bash
-sudo bash -c "$(curl -fsSL https://github.com/PasarGuard/scripts/raw/main/pasarguard.sh)" @ install --database mysql
+sudo bash -c "$(curl -fsSL https://github.com/GamerKhaan/scripts/raw/main/pasarguard.sh)" @ install --database mysql
 ```
 
 **MariaDB:**
 ```bash
-sudo bash -c "$(curl -fsSL https://github.com/PasarGuard/scripts/raw/main/pasarguard.sh)" @ install --database mariadb
+sudo bash -c "$(curl -fsSL https://github.com/GamerKhaan/scripts/raw/main/pasarguard.sh)" @ install --database mariadb
 ```
 
 **PostgreSQL:**
 ```bash
-sudo bash -c "$(curl -fsSL https://github.com/PasarGuard/scripts/raw/main/pasarguard.sh)" @ install --database postgresql
+sudo bash -c "$(curl -fsSL https://github.com/GamerKhaan/scripts/raw/main/pasarguard.sh)" @ install --database postgresql
 ```
+
+> **Existing PasarGuard install:** Run the same command. The installer detects an existing official installation, creates a pre-migration backup, preserves its database, `.env`, data, TLS and templates, and adopts the GamerKhaan image in place.
 
 ### 📋 After installation:
 
