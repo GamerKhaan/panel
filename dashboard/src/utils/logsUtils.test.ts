@@ -24,6 +24,14 @@ describe('AWG node log parsing', () => {
     expect(redacted.match(/\[REDACTED\]/g)?.length).toBeGreaterThanOrEqual(9)
   })
 
+  it('redacts JSON-style secret fields before a log reaches the UI', () => {
+    const input = '{"private_key":"JSONSECRET","api_key":"APIJSONSECRET","token":"TOKENJSONSECRET"}'
+    const redacted = redactSensitiveLogMessage(input)
+    for (const secret of ['JSONSECRET', 'APIJSONSECRET', 'TOKENJSONSECRET']) {
+      expect(redacted).not.toContain(secret)
+    }
+  })
+
   it('keeps long AWG event messages intact after safe redaction', () => {
     const payload = 'x'.repeat(4096)
     const [log] = parseLogs(`[AWG] [warning] event=reconcile note=${payload}`)

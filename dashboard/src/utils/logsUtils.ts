@@ -61,8 +61,9 @@ export function redactSensitiveLogMessage(value: string): string {
     .replace(/\bgithub_pat_[A-Za-z0-9_]{20,}\b/g, '[REDACTED]')
     .replace(/\bgh[opusr]_[A-Za-z0-9]{20,}\b/g, '[REDACTED]')
     .replace(
-      /\b(private(?:[_ -]?key)?|preshared(?:[_ -]?key)?|pre[_ -]?shared[_ -]?key|header[_ -]?protection[_ -]?key|psk|password|passwd|api[_ -]?key|access[_ -]?token|github[_ -]?token|subscription[_ -]?token|credential|secret|token)\b(\s*[:=]\s*)(?:"[^"]*"|'[^']*'|[^\s,;]+)/gi,
-      (_match, key: string, separator: string) => `${key}${separator}[REDACTED]`,
+      /(["']?)\b(private(?:[_ -]?key)?|preshared(?:[_ -]?key)?|pre[_ -]?shared[_ -]?key|header[_ -]?protection[_ -]?key|psk|password|passwd|api[_ -]?key|access[_ -]?token|github[_ -]?token|subscription[_ -]?token|credential|secret|token)\b\1(\s*[:=]\s*)(?:(["'])[^"']*\4|[^\s,;}]+)/gi,
+      (_match, keyQuote: string, key: string, separator: string, valueQuote: string) =>
+        `${keyQuote}${key}${keyQuote}${separator}${valueQuote ? `${valueQuote}[REDACTED]${valueQuote}` : '[REDACTED]'}`,
     )
 }
 
