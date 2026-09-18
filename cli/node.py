@@ -81,15 +81,13 @@ async def _wait_for_reconnect(db, node_id: int):
     return refreshed
 
 
-async def _restore_pairing(db, node_id: int, db_node, original: NodeModify, operation: NodeOperation) -> None:
+async def _restore_pairing(db, node_id: int, db_node, original: NodeModify, operation: NodeOperation) -> bool:
     try:
         await crud_modify_node(db, db_node, original)
-    except Exception:
-        return
-    try:
         await operation.connect_single_node(db, node_id, force_start=True)
     except Exception:
-        return
+        return False
+    return True
 
 
 async def _pair_node(node_id: int, pairing_file: Path) -> str:
@@ -108,13 +106,17 @@ async def _pair_node(node_id: int, pairing_file: Path) -> str:
             await operation.connect_single_node(db, node_id, force_start=True)
             refreshed = await _wait_for_reconnect(db, node_id)
         except Exception:
-            await _restore_pairing(db, node_id, db_node, original, operation)
+            rollback_ok = await _restore_pairing(db, node_id, db_node, original, operation)
+            if not rollback_ok:
+                raise ValueError(f"Node {node_id} pairing reconnect failed and rollback failed") from None
             raise ValueError(f"Node {node_id} pairing updated but reconnect failed") from None
 
         if refreshed.status.value == "connected":
             return refreshed.status.value
 
-        await _restore_pairing(db, node_id, refreshed, original, operation)
+        rollback_ok = await _restore_pairing(db, node_id, refreshed, original, operation)
+        if not rollback_ok:
+            raise ValueError(f"Node {node_id} pairing reconnect failed and rollback failed")
         raise ValueError(f"Node {node_id} pairing updated but reconnect failed")
 
 
