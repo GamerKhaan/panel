@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
+import { compareDistributionVersions, normalizeDistributionVersion } from '@/utils/distribution-version'
 
 interface CachedRelease {
   version: string
@@ -16,29 +17,6 @@ interface NodeReleaseResult {
 const GITHUB_API_URL = 'https://api.github.com/repos/GamerKhaan/node/releases/latest'
 const CACHE_KEY = 'pg_node_release'
 const CACHE_DURATION = 10 * 60 * 1000
-
-function compareVersions(current: string, latest: string): number {
-  const currentParts = current
-    .trim()
-    .replace(/^v/i, '')
-    .split(/[\.-]/)
-    .filter(p => !isNaN(Number(p)))
-    .map(Number)
-  const latestParts = latest
-    .trim()
-    .replace(/^v/i, '')
-    .split(/[\.-]/)
-    .filter(p => !isNaN(Number(p)))
-    .map(Number)
-
-  for (let i = 0; i < Math.max(currentParts.length, latestParts.length); i++) {
-    const curr = currentParts[i] || 0
-    const lat = latestParts[i] || 0
-    if (curr < lat) return -1
-    if (curr > lat) return 1
-  }
-  return 0
-}
 
 function getCached(): CachedRelease | null {
   try {
@@ -101,9 +79,10 @@ export function useNodeReleases(): NodeReleaseResult {
 
   const hasUpdate = (currentVersion: string | null) => {
     if (!currentVersion || !data?.version) return false
-    const cleanCurrent = currentVersion.trim().replace(/^v/i, '')
-    const cleanLatest = data.version.trim().replace(/^v/i, '')
-    return compareVersions(cleanCurrent, cleanLatest) < 0
+    const cleanCurrent = normalizeDistributionVersion(currentVersion)
+    const cleanLatest = normalizeDistributionVersion(data.version)
+    if (!cleanCurrent || !cleanLatest) return false
+    return compareDistributionVersions(cleanCurrent, cleanLatest) < 0
   }
 
   return {

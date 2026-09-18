@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
+import { compareDistributionVersions, normalizeDistributionVersion } from '@/utils/distribution-version'
 
 interface CachedRelease {
   version: string
@@ -21,19 +22,6 @@ interface UseVersionCheckOptions {
 const GITHUB_API_URL = 'https://api.github.com/repos/GamerKhaan/panel/releases/latest'
 const CACHE_KEY = 'pg_release'
 const CACHE_DURATION = 10 * 60 * 1000
-
-function compareVersions(current: string, latest: string): number {
-  const currentParts = current.replace(/^v/, '').split('.').map(Number)
-  const latestParts = latest.replace(/^v/, '').split('.').map(Number)
-
-  for (let i = 0; i < Math.max(currentParts.length, latestParts.length); i++) {
-    const curr = currentParts[i] || 0
-    const lat = latestParts[i] || 0
-    if (curr < lat) return -1
-    if (curr > lat) return 1
-  }
-  return 0
-}
 
 function getCached(): CachedRelease | null {
   try {
@@ -97,9 +85,11 @@ export function useVersionCheck(currentVersion: string | null, options: UseVersi
   })
 
   const latestVersion = data?.version || null
-  const cleanCurrentVersion = currentVersion?.replace(/^v/, '') || null
+  const cleanCurrentVersion = normalizeDistributionVersion(currentVersion)
 
-  const hasUpdate = enabled && !!(cleanCurrentVersion && latestVersion && compareVersions(cleanCurrentVersion, latestVersion) < 0)
+  const hasUpdate =
+    enabled &&
+    !!(cleanCurrentVersion && latestVersion && compareDistributionVersions(cleanCurrentVersion, latestVersion) < 0)
 
   return {
     hasUpdate,

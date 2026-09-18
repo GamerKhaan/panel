@@ -33,7 +33,7 @@ export function VersionUpdateBanner() {
   const [isVisible, setIsVisible] = useState(false)
   const [isClosing, setIsClosing] = useState(false)
   const [isAnimating, setIsAnimating] = useState(false)
-  const normalizedVersion = currentVersion ? currentVersion.replace(/[^0-9.]/g, '') : null
+  const normalizedVersion = currentVersion ? currentVersion.trim().replace(/^v/i, '') : null
   const { hasUpdate, latestVersion, releaseUrl, isLoading } = useVersionCheck(normalizedVersion, { enabled: isOwnerAdmin })
 
   const gradientBg = getGradientByColorTheme(colorTheme, isDark, 'banner')
