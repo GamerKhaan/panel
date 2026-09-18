@@ -1,5 +1,5 @@
-from pathlib import Path
 import unittest
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 BRIDGE = "919b71dfea60ff4c95e53b1c9232c5ee9921e20d"

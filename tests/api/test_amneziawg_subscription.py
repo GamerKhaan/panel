@@ -1,11 +1,11 @@
 import io
-from pathlib import Path
 import shutil
 import subprocess
 import tempfile
 import zipfile
 from copy import deepcopy
 from html.parser import HTMLParser
+from pathlib import Path
 from unittest.mock import AsyncMock
 
 import pytest
@@ -27,7 +27,6 @@ from tests.api.helpers import (
     delete_user,
     unique_name,
 )
-
 
 _OMITTED = object()
 

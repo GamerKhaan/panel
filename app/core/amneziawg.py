@@ -107,7 +107,7 @@ class AmneziaWGConfig(dict):
 
         awg = self.get("awg")
         if not isinstance(awg, dict):
-            raise ValueError("awg must be an object")
+            raise TypeError("awg must be an object")
         normalized: dict[str, object] = {}
         for name, value in awg.items():
             if name in _INTEGER_FIELDS:
@@ -123,9 +123,10 @@ class AmneziaWGConfig(dict):
             else:
                 raise ValueError(f"unsupported AWG field {name!r}")
             normalized[name] = value
-        if normalized.get("header_protection_key"):
-            if any(normalized.get(name, 0) < 12 for name in ("s1", "s2", "s3", "s4")):
-                raise ValueError("header protection requires S1-S4 >= 12")
+        if normalized.get("header_protection_key") and any(
+            normalized.get(name, 0) < 12 for name in ("s1", "s2", "s3", "s4")
+        ):
+            raise ValueError("header protection requires S1-S4 >= 12")
         if int(normalized.get("jmin", 0)) > int(normalized.get("jmax", 0)):
             raise ValueError("jmin must not exceed jmax")
         ranges = [_validate_range(name, normalized.get(name, str(i + 1)), 4294967295) for i, name in enumerate(("h1", "h2", "h3", "h4"))]
@@ -184,7 +185,7 @@ class AmneziaWGConfig(dict):
         }
 
     @classmethod
-    def from_json(cls, data: dict) -> "AmneziaWGConfig":
+    def from_json(cls, data: dict) -> AmneziaWGConfig:
         instance = cls(config=data.get("config", {}))
         return instance
 

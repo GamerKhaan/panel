@@ -395,12 +395,14 @@ class NodeOperation(BaseOperation):
                     if old_status == NodeStatus.connected:
                         return None
                     node_version, core_version = await pg_node.get_versions()
-                    if core.type == CoreType.gamerkhaan_amneziawg:
-                        if not NodeOperation._record_awg_provenance(db_node, core_version):
-                            raise NodeAPIError(
-                                code=412,
-                                detail="AmneziaWG target provenance is absent or incompatible; Start was not sent",
-                            )
+                    if (
+                        core.type == CoreType.gamerkhaan_amneziawg
+                        and not NodeOperation._record_awg_provenance(db_node, core_version)
+                    ):
+                        raise NodeAPIError(
+                            code=412,
+                            detail="AmneziaWG target provenance is absent or incompatible; Start was not sent",
+                        )
                     return {
                         "node_id": db_node.id,
                         "status": NodeStatus.connected,
@@ -431,12 +433,14 @@ class NodeOperation(BaseOperation):
             if info is None:
                 return None
 
-            if core.type == CoreType.gamerkhaan_amneziawg:
-                if not NodeOperation._record_awg_provenance(db_node, info.core_version):
-                    raise NodeAPIError(
-                        code=412,
-                        detail="AmneziaWG target provenance is absent or incompatible after Start",
-                    )
+            if (
+                core.type == CoreType.gamerkhaan_amneziawg
+                and not NodeOperation._record_awg_provenance(db_node, info.core_version)
+            ):
+                raise NodeAPIError(
+                    code=412,
+                    detail="AmneziaWG target provenance is absent or incompatible after Start",
+                )
 
             log = logger.info if force_start or old_status != NodeStatus.connected else logger.debug
             log(f'Connected to "{db_node.name}" node v{info.node_version}, core run on v{info.core_version}')

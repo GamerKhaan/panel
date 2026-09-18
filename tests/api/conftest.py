@@ -23,8 +23,8 @@ aiocache.cached = dummy_cached
 @pytest.fixture(autouse=True)
 async def reset_subscription_caches():
     """Keep in-process subscription/template caches isolated between API tests."""
-    from app.subscription.config_cache import clear_sub_config_cache
     from app.subscription.client_templates import subscription_client_templates, subscription_xray_templates
+    from app.subscription.config_cache import clear_sub_config_cache
 
     async def clear_template_caches():
         for func in (subscription_client_templates, subscription_xray_templates):
