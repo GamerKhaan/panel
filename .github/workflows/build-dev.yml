@@ -1,12 +1,13 @@
-name: Build-Docker
+name: Build-Docker-dev
 
 on:
-  release:
-    types: [created]
+  push:
+    branches-ignore:
+      - main
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
   packages: write
 
 env:
@@ -16,42 +17,8 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
-  generate-changelog:
-    if: ${{ github.event_name == 'release' }}
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-      - name: Determine version range
-        id: tags
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          CURRENT_IS_PRERELEASE: ${{ github.event.release.prerelease }}
-        run: |
-          current_tag="${GITHUB_REF_NAME}"
-          prev_tag=""
-          if [ "${CURRENT_IS_PRERELEASE}" != "true" ]; then
-            prev_tag="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/releases" | jq -rs --arg current_tag "$current_tag" '[.[][] | select(.draft == false and .prerelease == false and .tag_name != $current_tag) | .tag_name][0] // empty')"
-          fi
-          if [ -z "$prev_tag" ]; then prev_tag="$(git describe --tags --abbrev=0 "${current_tag}^" 2>/dev/null || true)"; fi
-          if [ -z "$prev_tag" ]; then prev_tag="$(git rev-list --max-parents=0 HEAD)"; fi
-          echo "previous=$prev_tag" >> "$GITHUB_OUTPUT"
-          echo "current=$current_tag" >> "$GITHUB_OUTPUT"
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-      - name: Generate changelog
-        run: |
-          bunx changelogen@latest --from "${{ steps.tags.outputs.previous }}" --to "${{ steps.tags.outputs.current }}" | grep -v "Generating changelog for " | sed -e '/^\[log\]/d' -e '/./,$!d' > CHANGELOG.md
-      - name: Update release notes
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release edit "${{ github.event.release.tag_name }}" --notes-file CHANGELOG.md
-
   build-dashboard:
+    if: ${{ github.event_name == 'workflow_dispatch' || !contains(github.ref_name, '/') }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -130,14 +97,10 @@ jobs:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
-      - name: Create tagged manifest
-        run: |
-          docker buildx imagetools create -t "${{ env.IMAGE_NAME }}:${{ github.ref_name }}" "${{ env.IMAGE_NAME }}:${{ github.ref_name }}-amd64" "${{ env.IMAGE_NAME }}:${{ github.ref_name }}-arm64"
-          docker buildx imagetools inspect "${{ env.IMAGE_NAME }}:${{ github.ref_name }}"
-      - name: Create latest manifest for stable release
-        if: ${{ github.event_name == 'release' && github.event.release.prerelease != true }}
-        run: |
-          docker buildx imagetools create -t "${{ env.IMAGE_NAME }}:latest" "${{ env.IMAGE_NAME }}:${{ github.ref_name }}-amd64" "${{ env.IMAGE_NAME }}:${{ github.ref_name }}-arm64"
-          docker buildx imagetools inspect "${{ env.IMAGE_NAME }}:latest"
+      - name: Create branch manifest
+        uses: int128/docker-manifest-create-action@v2
+        with:
+          tags: ${{ env.IMAGE_NAME }}:${{ github.ref_name }}
+          sources: |
+            ${{ env.IMAGE_NAME }}:${{ github.ref_name }}-amd64
+            ${{ env.IMAGE_NAME }}:${{ github.ref_name }}-arm64
