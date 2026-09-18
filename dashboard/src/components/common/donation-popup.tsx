@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { DONATION_URL } from '@/constants/Project'
 import { getAuthToken } from '@/utils/authStorage'
 
 const DONATION_STORAGE_KEY = 'donation_popup_data'
@@ -261,7 +262,7 @@ export default function DonationPopup() {
   }
 
   const handleDonate = () => {
-    window.open('https://donate.pasarguard.org/', '_blank', 'noopener,noreferrer')
+    window.open(DONATION_URL, '_blank', 'noopener,noreferrer')
     handleClose()
   }
 

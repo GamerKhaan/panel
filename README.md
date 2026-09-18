@@ -1,8 +1,8 @@
 <p align="center">
-  <a href="https://github.com/PasarGuard/panel" target="_blank" rel="noopener noreferrer">
+  <a href="https://github.com/GamerKhaan/panel" target="_blank" rel="noopener noreferrer">
     <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="https://github.com/PasarGuard/PasarGuard.github.io/raw/main/public/logos/PasarGuard-white-logo.png">
-      <img width="160" height="160" src="https://github.com/PasarGuard/PasarGuard.github.io/raw/main/public/logos/PasarGuard-black-logo.png">
+      <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/GamerKhaan/panel/main/dashboard/public/statics/favicon/logo-pwa.png">
+      <img width="160" height="160" src="https://raw.githubusercontent.com/GamerKhaan/panel/main/dashboard/public/statics/favicon/logo-pwa.png">
     </picture>
   </a>
 </p>
@@ -17,20 +17,20 @@
 
 <br/>
 <p align="center">
-    <a href="https://github.com/PasarGuard/panel/actions/workflows/build.yml" target="_blank">
-        <img src="https://img.shields.io/github/actions/workflow/status/PasarGuard/panel/build.yml?style=flat-square" />
+    <a href="https://github.com/GamerKhaan/panel/actions/workflows/build.yml" target="_blank">
+        <img src="https://img.shields.io/github/actions/workflow/status/GamerKhaan/panel/build.yml?style=flat-square" />
     </a>
-    <a href="https://hub.docker.com/r/PasarGuard/panel" target="_blank">
-        <img src="https://img.shields.io/docker/pulls/pasarguard/panel?style=flat-square&logo=docker" />
+    <a href="https://github.com/GamerKhaan/panel/pkgs/container/panel" target="_blank">
+        <img src="https://img.shields.io/github/v/release/GamerKhaan/panel?style=flat-square&logo=docker" />
     </a>
-    <a href="https://github.com/PasarGuard/panel/blob/main/LICENSE" target="_blank">
-        <img src="https://img.shields.io/github/license/PasarGuard/panel?style=flat-square" />
+    <a href="https://github.com/GamerKhaan/panel/blob/main/LICENSE" target="_blank">
+        <img src="https://img.shields.io/github/license/GamerKhaan/panel?style=flat-square" />
     </a>
-    <a href="https://t.me/Pasar_Guard" target="_blank">
+    <a href="https://amooserver.com" target="_blank">
         <img src="https://img.shields.io/badge/telegram-group-blue?style=flat-square&logo=telegram" />
     </a>
-    <a href="https://github.com/PasarGuard/panel" target="_blank">
-        <img src="https://img.shields.io/github/stars/PasarGuard/panel?style=social" />
+    <a href="https://github.com/GamerKhaan/panel" target="_blank">
+        <img src="https://img.shields.io/github/stars/GamerKhaan/panel?style=social" />
     </a>
 </p>
 
@@ -49,8 +49,8 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/PasarGuard/panel" target="_blank" rel="noopener noreferrer" >
-    <img src="https://github.com/PasarGuard/PasarGuard.github.io/raw/main/public/logos/screenshot.png" alt="PasarGuard screenshots" width="600" height="auto">
+  <a href="https://github.com/GamerKhaan/panel" target="_blank" rel="noopener noreferrer" >
+    <img src="https://raw.githubusercontent.com/GamerKhaan/panel/main/dashboard/public/statics/favicon/logo-pwa.png" alt="PasarGuard screenshots" width="600" height="auto">
   </a>
 </p>
 
@@ -168,7 +168,7 @@ sudo bash -c "$(curl -fsSL https://github.com/GamerKhaan/scripts/raw/main/pasarg
 **💾 Data files:** `/var/lib/pasarguard`
 
 **🔒 Important:** Dashboard requires SSL certificate for security
-- Get SSL certificate: [Guide](https://docs.pasarguard.org/en/examples/issue-ssl-certificate)
+- Get SSL certificate: [Guide](https://amooserver.com)
 - Access: `https://YOUR_DOMAIN:8000/dashboard/`
 
 **🔗 For testing without domain:** Use SSH port forwarding (see below)
@@ -205,17 +205,17 @@ pasarguard --help
 
 **📖 Official Documentation** - Complete guides available in:
 
-🇺🇸 **[English](https://docs.pasarguard.org/en)**
+🇺🇸 **[English](https://amooserver.com)**
 
-🇮🇷 **[فارسی](https://docs.pasarguard.org/fa)**
+🇮🇷 **[فارسی](https://amooserver.com)**
 
-🇷🇺 **[Русский](https://docs.pasarguard.org/ru)**
+🇷🇺 **[Русский](https://amooserver.com)**
 
-🇨🇳 **[简体中文](https://docs.pasarguard.org/zh-cn)**
+🇨🇳 **[简体中文](https://amooserver.com)**
 
 </div>
 
-> **Contributing:** Help improve documentation on [GitHub](https://github.com/PasarGuard/PasarGuard.github.io)
+> **Contributing:** Help improve documentation on [GitHub](https://github.com/GamerKhaan/panel)
 
 ---
 
@@ -227,7 +227,7 @@ pasarguard --help
 
 If PasarGuard helps you, consider supporting its development:
 
-[![Donate](https://img.shields.io/badge/Donate-Support%20Us-green?style=for-the-badge)](https://donate.pasarguard.org)
+[![Donate](https://img.shields.io/badge/Donate-Support%20Us-green?style=for-the-badge)](https://amooserver.com)
 
 **Thank you for your support!** 💖
 

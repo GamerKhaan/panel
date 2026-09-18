@@ -1,5 +1,5 @@
 export const REPO_URL = 'https://github.com/GamerKhaan/panel'
 export const ORGANIZATION_URL = 'https://github.com/GamerKhaan'
-export const DONATION_URL = 'https://donate.pasarguard.org'
-export const DISCUSSION_GROUP = 'https://t.me/Pasar_Guard'
-export const DOCUMENTATION = 'https://docs.pasarguard.org'
+export const DONATION_URL = 'https://amooserver.com'
+export const DISCUSSION_GROUP = 'https://amooserver.com'
+export const DOCUMENTATION = 'https://amooserver.com'

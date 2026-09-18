@@ -67,6 +67,18 @@ class ForkDistributionTests(unittest.TestCase):
         self.assertIn('dialect == "sqlite"', migration)
         self.assertIn("batch_alter_table", migration)
 
+    def test_public_website_support_and_ads_links_are_owned(self):
+        project = (ROOT / "dashboard/src/constants/Project.ts").read_text()
+        donation_popup = (ROOT / "dashboard/src/components/common/donation-popup.tsx").read_text()
+        goal_progress = (ROOT / "dashboard/src/components/layout/goal-progress.tsx").read_text()
+
+        self.assertIn("export const DONATION_URL = 'https://amooserver.com'", project)
+        self.assertIn("export const DISCUSSION_GROUP = 'https://amooserver.com'", project)
+        self.assertIn("export const DOCUMENTATION = 'https://amooserver.com'", project)
+        self.assertNotIn("donate.pasarguard.org", donation_popup)
+        self.assertNotIn("t.me/Pasar_Guard", goal_progress)
+        self.assertNotIn("donate.pasarguard.org", goal_progress)
+
     def test_dashboard_runtime_has_no_pasarguard_github_control_plane(self):
         forbidden = (
             "https://github.com/PasarGuard",
