@@ -1,11 +1,13 @@
 export type LogType = 'error' | 'warning' | 'info' | 'debug'
 export type LogVariant = 'red' | 'yellow' | 'blue' | 'orange'
+export type LogSource = 'awg' | 'other'
 
 export interface LogLine {
   id: string
   rawTimestamp: string | null
   timestamp: Date | null
   type: LogType
+  source: LogSource
   message: string
 }
 
@@ -52,6 +54,22 @@ export function appendTrim<T>(prev: T[], next: T[], max: number): T[] {
   return prev.concat(next).slice(-max)
 }
 
+export function redactSensitiveLogMessage(value: string): string {
+  return value
+    .replace(/-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----[\s\S]*?-----END (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/gi, '[REDACTED]')
+    .replace(/\bAuthorization\s*:\s*Bearer\s+[^\s,;]+/gi, 'Authorization: Bearer [REDACTED]')
+    .replace(/\bgithub_pat_[A-Za-z0-9_]{20,}\b/g, '[REDACTED]')
+    .replace(/\bgh[opusr]_[A-Za-z0-9]{20,}\b/g, '[REDACTED]')
+    .replace(
+      /\b(private(?:[_ -]?key)?|preshared(?:[_ -]?key)?|pre[_ -]?shared[_ -]?key|header[_ -]?protection[_ -]?key|psk|password|passwd|api[_ -]?key|access[_ -]?token|github[_ -]?token|subscription[_ -]?token|credential|secret|token)\b(\s*[:=]\s*)(?:"[^"]*"|'[^']*'|[^\s,;]+)/gi,
+      (_match, key: string, separator: string) => `${key}${separator}[REDACTED]`,
+    )
+}
+
+export function getLogSource(message: string): LogSource {
+  return /^\s*(?:\[(?:awg|amneziawg)\]|(?:awg|amneziawg)(?:[_\s:-]|$))/i.test(message) ? 'awg' : 'other'
+}
+
 export function parseLogs(logString: string): LogLine[] {
   // Regex to match the log line format
   // Example of return :
@@ -61,7 +79,7 @@ export function parseLogs(logString: string): LogLine[] {
   // message: "The server is running on port 8080" }
   const logRegex = /^(?:(\d+)\s+)?(\d{4}\/\d{2}\/\d{2} \d{2}:\d{2}:\d{2}(?:\.\d+)?|\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z|\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3} UTC)?\s*(.*)$/
 
-  return logString
+  return redactSensitiveLogMessage(logString)
     .split('\n')
     .map(line => line.trim())
     .filter(line => line !== '')
@@ -93,10 +111,15 @@ export function parseLogs(logString: string): LogLine[] {
         }
       }
 
+      const source = getLogSource(message)
       const type = getLogType(message).type
 
-      // Remove duplicate status indicators from message text since they're shown in badges
+      // Remove source/severity indicators from the text because they are rendered as badges.
       let cleanedMessage = message.trim()
+      if (source === 'awg') {
+        cleanedMessage = cleanedMessage.replace(/^\[(?:AWG|AMNEZIAWG)\]\s*/i, '')
+        cleanedMessage = cleanedMessage.replace(/^(?:AWG|AMNEZIAWG)[_\s:-]+/i, '')
+      }
       cleanedMessage = cleanedMessage.replace(/^\[(Debug|Info|Warn|Warning|Error)\]\s*/i, '')
       cleanedMessage = cleanedMessage.replace(/^(Debug|Info|Warn|Warning|Error):\s*/i, '')
 
@@ -105,6 +128,7 @@ export function parseLogs(logString: string): LogLine[] {
         rawTimestamp: timestamp ?? null,
         timestamp: parsedTimestamp,
         type,
+        source,
         message: cleanedMessage,
       }
     })

@@ -1,4 +1,4 @@
-import { Download as DownloadIcon, Loader2, Pause, Play } from 'lucide-react'
+import { Download as DownloadIcon, Loader2, Pause, Play, RadioTower, ScrollText, Wifi, WifiOff } from 'lucide-react'
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Card, CardContent } from '@/components/ui/card'
@@ -16,7 +16,7 @@ import { TerminalLine } from '@/features/nodes/components/terminal-line'
 import { LineCountFilter } from '@/features/nodes/components/line-count-filter'
 import { SinceLogsFilter, type TimeFilter } from '@/features/nodes/components/since-logs-filter'
 import { StatusLogsFilter } from '@/features/nodes/components/status-logs-filter'
-import { appendTrim, parseLogs, type LogLine } from '@/utils/logsUtils'
+import { appendTrim, parseLogs, type LogLine, type LogSource } from '@/utils/logsUtils'
 import { EventSource } from 'eventsource'
 
 /** Max raw SSE chunks kept in memory; display "lines" is sliced client-side (no reconnect). */
@@ -35,7 +35,22 @@ const SINCE_DURATION_MS: Record<Exclude<TimeFilter, 'all'>, number> = {
   '24h': 24 * 60 * 60 * 1000,
 }
 
-export const priorities = [
+type StreamState = 'idle' | 'connecting' | 'connected' | 'reconnecting'
+
+const logSources = [
+  {
+    label: 'nodes.logs.awg',
+    value: 'awg',
+    icon: RadioTower,
+  },
+  {
+    label: 'nodes.logs.other',
+    value: 'other',
+    icon: ScrollText,
+  },
+]
+
+const priorities = [
   {
     label: 'nodes.logs.info',
     value: 'info',
@@ -64,6 +79,8 @@ export default function NodeLogs() {
   const [showTimestamp, setShowTimestamp] = useState(true)
   const [since, setSince] = useState<TimeFilter>('all')
   const [typeFilter, setTypeFilter] = useState<string[]>([])
+  const [sourceFilter, setSourceFilter] = useState<LogSource[]>([])
+  const [streamState, setStreamState] = useState<StreamState>('idle')
   const [isPaused, setIsPaused] = useState(false)
   const [messageBuffer, setMessageBuffer] = useState<LogLine[]>([])
   const isPausedRef = useRef(false)
@@ -74,7 +91,7 @@ export default function NodeLogs() {
   const eventSourceRef = useRef<EventSource | null>(null)
 
   const { data: nodesResponse } = useGetNodesSimple({ all: true })
-  const nodes = nodesResponse?.nodes || []
+  const nodes = useMemo(() => nodesResponse?.nodes || [], [nodesResponse?.nodes])
 
   // Filter to only show connected nodes
   const connectedNodes = useMemo(() => nodes.filter(node => node.status === 'connected'), [nodes])
@@ -137,6 +154,7 @@ export default function NodeLogs() {
     setRawLogs([])
     setMessageBuffer([])
     setIsPaused(false)
+    setStreamState(nodeId === 0 ? 'idle' : 'connecting')
     isPausedRef.current = false
     autoScrollRef.current = true
     if (eventSourceRef.current) {
@@ -148,6 +166,7 @@ export default function NodeLogs() {
   useEffect(() => {
     if (selectedNode === 0) {
       setIsLoading(false)
+      setStreamState('idle')
       return
     }
 
@@ -157,6 +176,7 @@ export default function NodeLogs() {
     const pending: LogLine[] = []
     let loadingCleared = false
     setIsLoading(true)
+    setStreamState('connecting')
     setRawLogs([])
     setMessageBuffer([])
     // Reset pause state when container changes
@@ -212,6 +232,7 @@ export default function NodeLogs() {
         eventSource.close()
         return
       }
+      setStreamState('connected')
       resetNoDataTimeout()
     }
 
@@ -222,6 +243,7 @@ export default function NodeLogs() {
       if (parsedLogs.length === 0) return
 
       pending.push(...parsedLogs)
+      setStreamState('connected')
       if (!loadingCleared) {
         loadingCleared = true
         setIsLoading(false)
@@ -232,9 +254,9 @@ export default function NodeLogs() {
       }
     }
 
-    eventSource.onerror = error => {
+    eventSource.onerror = () => {
       if (!isCurrentConnection) return
-      console.error('SSE error:', error)
+      setStreamState('reconnecting')
       setIsLoading(false)
       if (noDataTimeout) clearTimeout(noDataTimeout)
     }
@@ -257,12 +279,14 @@ export default function NodeLogs() {
     const query = (debouncedSearch || '').toLowerCase()
     const cutoffMs = since === 'all' ? null : Date.now() - SINCE_DURATION_MS[since]
     const hasTypeFilter = typeFilter.length > 0
+    const hasSourceFilter = sourceFilter.length > 0
 
     const noTimestamp: LogLine[] = []
     const timestamped: LogLine[] = []
     for (let i = 0; i < rawLogs.length; i++) {
       const log = rawLogs[i]
       if (hasTypeFilter && !typeFilter.includes(log.type)) continue
+      if (hasSourceFilter && !sourceFilter.includes(log.source)) continue
       if (query && !log.message.toLowerCase().includes(query)) continue
       if (cutoffMs !== null && log.timestamp && log.timestamp.getTime() < cutoffMs) continue
       if (!log.timestamp) noTimestamp.push(log)
@@ -270,11 +294,21 @@ export default function NodeLogs() {
     }
     const visibleTimestamped = timestamped.length > lines ? timestamped.slice(-lines) : timestamped
     return noTimestamp.length === 0 ? visibleTimestamped : noTimestamp.concat(visibleTimestamped)
-  }, [rawLogs, debouncedSearch, lines, since, typeFilter])
+  }, [rawLogs, debouncedSearch, lines, since, typeFilter, sourceFilter])
 
   useEffect(() => {
     scrollToBottom()
   }, [filteredLogs])
+
+  const isAwgOnly = sourceFilter.length === 1 && sourceFilter[0] === 'awg'
+  const streamStatusLabel =
+    streamState === 'connected'
+      ? t('nodes.logs.connected')
+      : streamState === 'reconnecting'
+        ? t('nodes.logs.reconnecting')
+        : streamState === 'connecting'
+          ? t('nodes.logs.connecting')
+          : t('nodes.logs.disconnected')
 
   const handleDownload = () => {
     const logContent = filteredLogs.map(({ timestamp, message }: { timestamp: Date | null; message: string }) => `${timestamp?.toISOString() || 'No timestamp'} ${message}`).join('\n')
@@ -314,6 +348,24 @@ export default function NodeLogs() {
             </Select>
           </div>
 
+          <div
+            role="status"
+            aria-live="polite"
+            aria-label={streamStatusLabel}
+            title={streamStatusLabel}
+            className={cn(
+              'flex h-9 w-9 shrink-0 items-center justify-center rounded-md border text-xs sm:w-auto sm:gap-1.5 sm:px-2.5',
+              streamState === 'connected'
+                ? 'border-green-500/30 bg-green-500/10 text-green-700 dark:text-green-400'
+                : streamState === 'reconnecting'
+                  ? 'border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-400'
+                  : 'text-muted-foreground bg-muted/30',
+            )}
+          >
+            {streamState === 'connected' ? <Wifi className="h-4 w-4" /> : streamState === 'connecting' ? <Loader2 className="h-4 w-4 animate-spin" /> : <WifiOff className="h-4 w-4" />}
+            <span className="hidden sm:inline">{streamStatusLabel}</span>
+          </div>
+
           <div className="flex shrink-0 gap-2">
             <Button variant="outline" size="sm" className="h-9 px-2.5 sm:px-3" onClick={handlePauseResume} title={isPaused ? t('nodes.logs.resume') : t('nodes.logs.pause')}>
               {isPaused ? <Play className="h-4 w-4 sm:me-2" /> : <Pause className="h-4 w-4 sm:me-2" />}
@@ -335,10 +387,26 @@ export default function NodeLogs() {
             <StatusLogsFilter value={typeFilter} setValue={setTypeFilter} title={t('nodes.logs.filter')} options={priorities} />
           </div>
 
+          <div className="w-full min-w-0 lg:w-auto">
+            <StatusLogsFilter
+              value={sourceFilter}
+              setValue={values => setSourceFilter(values.filter((value): value is LogSource => value === 'awg' || value === 'other'))}
+              title={t('nodes.logs.source')}
+              options={logSources}
+            />
+          </div>
+
           <div className="col-span-2 w-full min-w-0 lg:w-56 xl:w-72">
             <Input type="search" placeholder={t('nodes.logs.search')} value={search} onChange={handleSearch} className="h-9 text-sm" />
           </div>
         </div>
+
+        {streamState === 'reconnecting' && (
+          <Alert role="alert" className="border-amber-500/50 bg-amber-500/10 text-amber-800 dark:text-amber-300">
+            <WifiOff className="h-4 w-4" />
+            <AlertDescription>{t('nodes.logs.streamError')}</AlertDescription>
+          </Alert>
+        )}
 
         {isPaused && (
           <Alert className="border-amber-500/50 bg-amber-500/15 text-amber-700 dark:text-amber-400">
@@ -366,11 +434,12 @@ export default function NodeLogs() {
             {filteredLogs.length > 0 ? (
               filteredLogs.map((filteredLog: LogLine) => <TerminalLine key={filteredLog.id} log={filteredLog} searchTerm={debouncedSearch || ''} noTimestamp={!showTimestamp} />)
             ) : isLoading ? (
-              <div className="text-muted-foreground flex h-full items-center justify-center">
-                <Loader2 className="h-6 w-6" />
+              <div className="text-muted-foreground flex h-full items-center justify-center gap-2" role="status" aria-live="polite">
+                <Loader2 className="h-5 w-5 animate-spin" />
+                <span>{t('nodes.logs.loading')}</span>
               </div>
             ) : (
-              <div className="text-muted-foreground flex h-full items-center justify-center px-4 text-center">{t('nodes.logs.noLogs')}</div>
+              <div className="text-muted-foreground flex h-full items-center justify-center px-4 text-center">{isAwgOnly ? t('nodes.logs.noAwgLogs') : t('nodes.logs.noLogs')}</div>
             )}
           </div>
         </CardContent>

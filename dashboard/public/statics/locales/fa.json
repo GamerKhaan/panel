@@ -2111,7 +2111,18 @@
         "30m": "۳۰ دقیقه",
         "1h": "۱ ساعت",
         "2h": "۲ ساعت"
-      }
+      },
+      "source": "منبع",
+      "awg": "AWG",
+      "other": "سایر",
+      "awgSource": "لاگ AmneziaWG",
+      "connected": "متصل",
+      "connecting": "در حال اتصال",
+      "reconnecting": "اتصال مجدد",
+      "disconnected": "قطع",
+      "streamError": "ارتباط لاگ‌ها قطع شده است؛ اتصال مجدد به‌صورت خودکار انجام می‌شود…",
+      "loading": "در حال بارگذاری لاگ‌ها…",
+      "noAwgLogs": "هیچ لاگ AWG با فیلترهای فعلی مطابقت ندارد"
     },
     "wireguard": {
       "title": "WireGuard",

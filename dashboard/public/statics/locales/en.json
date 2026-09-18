@@ -116,7 +116,18 @@
         "30m": "30 minutes",
         "1h": "1 hour",
         "2h": "2 hours"
-      }
+      },
+      "source": "Source",
+      "awg": "AWG",
+      "other": "Other",
+      "awgSource": "AmneziaWG log",
+      "connected": "Live",
+      "connecting": "Connecting",
+      "reconnecting": "Reconnecting",
+      "disconnected": "Offline",
+      "streamError": "Log stream disconnected. Reconnecting automatically…",
+      "loading": "Loading logs…",
+      "noAwgLogs": "No AWG logs match the current filters"
     },
     "wireguard": {
       "title": "WireGuard",

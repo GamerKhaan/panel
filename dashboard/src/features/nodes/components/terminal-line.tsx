@@ -29,7 +29,7 @@ function formatLogTimes(timestamp: Date | null, rawTimestamp: string | null): { 
 }
 
 export const TerminalLine = memo(function TerminalLine({ log, noTimestamp, searchTerm }: LogLineProps) {
-  const { timestamp, message, rawTimestamp } = log
+  const { timestamp, message, rawTimestamp, source } = log
   const { type, variant, color } = getLogStyle(log.type)
   const { t, i18n } = useTranslation()
   const locale = i18n.language
@@ -62,6 +62,11 @@ export const TerminalLine = memo(function TerminalLine({ log, noTimestamp, searc
         <Badge variant={variant} className={cn('min-w-12 shrink-0 justify-center px-1.5 py-0 text-[11px] sm:min-w-14 sm:text-[10px]', locale === 'fa' && 'font-body')}>
           {t(`nodes.logs.${type}`)}
         </Badge>
+        {source === 'awg' && (
+          <Badge variant="green" className="shrink-0 px-1.5 py-0 text-[10px]" title={t('nodes.logs.awgSource')}>
+            AWG
+          </Badge>
+        )}
       </div>
       <span className="text-foreground min-w-0 flex-1 font-mono text-xs leading-relaxed wrap-anywhere whitespace-pre-wrap dark:text-gray-200" dangerouslySetInnerHTML={{ __html: highlightedHtml }} />
     </div>

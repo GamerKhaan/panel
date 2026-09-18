@@ -112,7 +112,18 @@
         "30m": "30分钟",
         "1h": "1小时",
         "2h": "2小时"
-      }
+      },
+      "source": "来源",
+      "awg": "AWG",
+      "other": "其他",
+      "awgSource": "AmneziaWG 日志",
+      "connected": "已连接",
+      "connecting": "正在连接",
+      "reconnecting": "正在重新连接",
+      "disconnected": "已断开",
+      "streamError": "日志流已断开，正在自动重新连接…",
+      "loading": "正在加载日志…",
+      "noAwgLogs": "没有符合当前筛选条件的 AWG 日志"
     },
     "wireguard": {
       "title": "WireGuard",

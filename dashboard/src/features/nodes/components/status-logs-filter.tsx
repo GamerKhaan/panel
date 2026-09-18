@@ -38,7 +38,19 @@ export function StatusLogsFilter({ value = [], setValue, title, options }: Statu
       return (
         <>
           <Badge
-            variant={selected?.value === 'error' ? 'red' : selected?.value === 'warning' ? 'orange' : selected?.value === 'info' ? 'blue' : selected?.value === 'debug' ? 'yellow' : 'blank'}
+            variant={
+              selected?.value === 'error'
+                ? 'red'
+                : selected?.value === 'warning'
+                  ? 'orange'
+                  : selected?.value === 'info'
+                    ? 'blue'
+                    : selected?.value === 'debug'
+                      ? 'yellow'
+                      : selected?.value === 'awg'
+                        ? 'green'
+                        : 'blank'
+            }
             className="rounded-sm px-1 font-normal"
           >
             {t(selected?.label || '')}
@@ -58,7 +70,7 @@ export function StatusLogsFilter({ value = [], setValue, title, options }: Statu
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <Button variant="outline" size="sm" className="bg-input h-9 w-full min-w-0 justify-start text-sm lg:w-auto">
+        <Button aria-label={title} variant="outline" size="sm" className="bg-input h-9 w-full min-w-0 justify-start text-sm lg:w-auto">
           <span className="truncate">{title}</span>
           <Separator orientation="vertical" className="mx-2 h-4 shrink-0" />
           <div className="flex min-w-0 items-center gap-1 overflow-hidden">{getSelectedBadges()}</div>
@@ -97,7 +109,21 @@ export function StatusLogsFilter({ value = [], setValue, title, options }: Statu
                       <CheckIcon className={cn('h-4 w-4')} />
                     </div>
                     {option.icon && <option.icon className="text-muted-foreground mr-2 h-4 w-4" />}
-                    <Badge variant={option.value === 'error' ? 'red' : option.value === 'warning' ? 'orange' : option.value === 'info' ? 'blue' : option.value === 'debug' ? 'yellow' : 'blank'}>
+                    <Badge
+                      variant={
+                        option.value === 'error'
+                          ? 'red'
+                          : option.value === 'warning'
+                            ? 'orange'
+                            : option.value === 'info'
+                              ? 'blue'
+                              : option.value === 'debug'
+                                ? 'yellow'
+                                : option.value === 'awg'
+                                  ? 'green'
+                                  : 'blank'
+                      }
+                    >
                       {t(option.label)}
                     </Badge>
                   </CommandItem>
