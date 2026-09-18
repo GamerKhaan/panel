@@ -54,6 +54,12 @@ class ForkDistributionTests(unittest.TestCase):
             package,
         )
 
+    def test_database_migration_workflow_materializes_pinned_bridge(self):
+        workflow = (ROOT / ".github/workflows/test-database-migrations.yml").read_text()
+        self.assertGreaterEqual(workflow.count("GamerKhaan/node_bridge_py.git"), 5)
+        self.assertGreaterEqual(workflow.count(BRIDGE), 5)
+        self.assertGreaterEqual(workflow.count("../m2-bridge-source"), 5)
+
     def test_dashboard_runtime_has_no_pasarguard_github_control_plane(self):
         forbidden = (
             "https://github.com/PasarGuard",
