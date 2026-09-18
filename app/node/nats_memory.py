@@ -124,11 +124,35 @@ class NatsUserSyncStore:
     def _claimed_prefix(self, node_id: str) -> str:
         return f"c.{node_id}."
 
+    def _desired_prefix(self, node_id: str) -> str:
+        return f"d.{node_id}."
+
+    def _epoch_key(self, node_id: str) -> str:
+        return f"e.{node_id}"
+
     def _pending_key(self, node_id: str, email: str) -> str:
         return f"{self._pending_prefix(node_id)}{_digest(email)}"
 
     def _claimed_key(self, node_id: str, token: str) -> str:
         return f"{self._claimed_prefix(node_id)}{_digest(token)}"
+
+    def _desired_key(self, node_id: str, email: str) -> str:
+        return f"{self._desired_prefix(node_id)}{_digest(email)}"
+
+    async def _epoch(self, node_id: str) -> int:
+        doc, _ = await kv_get_json(self._kv, self._epoch_key(node_id))
+        return int((doc or {}).get("epoch", 0))
+
+    async def _advance_epoch(self, node_id: str) -> int:
+        key = self._epoch_key(node_id)
+        for attempt in range(32):
+            doc, revision = await kv_get_json(self._kv, key)
+            next_epoch = int((doc or {}).get("epoch", 0)) + 1
+            if await kv_cas_json(self._kv, key, {"epoch": next_epoch}, revision):
+                return next_epoch
+            if attempt < 31:
+                await cas_retry_backoff()
+        raise RuntimeError(f"failed to advance user-sync epoch for node {node_id}")
 
     def _ensure_value_size(self, key: str, value: dict[str, Any]) -> None:
         size = len(json.dumps(value, separators=(",", ":")).encode())
@@ -138,11 +162,24 @@ class NatsUserSyncStore:
             )
 
     async def _enqueue_one(self, node_id: str, email: str, user: User) -> None:
-        key = self._pending_key(node_id, email)
-        value = {"email": email, "user": _b64_user(user)}
-        self._ensure_value_size(key, value)
-        revision = await kv_put_json(self._kv, key, value)
-        self._key_index.observe_put(key, revision)
+        for _ in range(8):
+            epoch = await self._epoch(node_id)
+            value = {"email": email, "user": _b64_user(user), "epoch": epoch, "intent_id": uuid4().hex}
+            desired_key = self._desired_key(node_id, email)
+            pending_key = self._pending_key(node_id, email)
+            self._ensure_value_size(desired_key, value)
+            desired_revision = await kv_put_json(self._kv, desired_key, value)
+            self._key_index.observe_put(desired_key, desired_revision)
+            pending_revision = await kv_put_json(self._kv, pending_key, value)
+            self._key_index.observe_put(pending_key, pending_revision)
+            if await self._epoch(node_id) == epoch:
+                return
+            for key, revision in ((desired_key, desired_revision), (pending_key, pending_revision)):
+                try:
+                    await self._kv.delete(key, last=revision)
+                except Exception:
+                    pass
+        raise RuntimeError(f"user-sync epoch changed repeatedly for node {node_id}")
 
     async def enqueue_users(self, node_id: str, users: list[User]) -> None:
         if not users:
@@ -160,17 +197,7 @@ class NatsUserSyncStore:
                 continue
             if float(doc.get("expires_at", 0)) > now:
                 continue
-            email = doc.get("email")
-            user_b64 = doc.get("user")
-            if isinstance(email, str) and isinstance(user_b64, str):
-                pending_key = self._pending_key(node_id, email)
-                pending_value = {"email": email, "user": user_b64}
-                revision = await kv_put_json(self._kv, pending_key, pending_value)
-                self._key_index.observe_put(pending_key, revision)
-            try:
-                await self._kv.delete(key, last=rev)
-            except Exception as exc:
-                logger.debug("Failed to delete expired claim key=%s: %s", key, exc)
+            await self._requeue_claim_doc(node_id, key, doc, rev)
 
     async def claim_users(self, node_id: str, worker_id: str, limit: int, lease_seconds: float) -> list[ClaimedUser]:
         if limit <= 0:
@@ -197,6 +224,8 @@ class NatsUserSyncStore:
                 "token": token,
                 "email": email,
                 "user": user_b64,
+                "epoch": int(doc.get("epoch", 0)),
+                "intent_id": str(doc.get("intent_id", "")),
                 "expires_at": now + lease_seconds,
             }
             self._ensure_value_size(claimed_key, claimed_value)
@@ -222,7 +251,17 @@ class NatsUserSyncStore:
                         cleanup_exc,
                     )
                 continue
-            result.append(ClaimedUser(token=token, user=_user_from_b64(user_b64)))
+            if int(claimed_value["epoch"]) != await self._epoch(node_id):
+                await self._ack_one(node_id, token)
+                continue
+            result.append(
+                ClaimedUser(
+                    token=token,
+                    user=_user_from_b64(user_b64),
+                    epoch=int(claimed_value["epoch"]),
+                    intent_id=str(claimed_value["intent_id"]),
+                )
+            )
         return result
 
     async def _ack_one(self, node_id: str, token: str) -> None:
@@ -240,25 +279,78 @@ class NatsUserSyncStore:
             return
         await self._run_bounded(lambda token: self._ack_one(node_id, token), tokens)
 
-    async def _requeue_one(self, node_id: str, item: ClaimedUser) -> None:
-        pending_key = self._pending_key(node_id, item.user.email)
-        pending_value = {"email": item.user.email, "user": _b64_user(item.user)}
-        self._ensure_value_size(pending_key, pending_value)
-        revision = await kv_put_json(self._kv, pending_key, pending_value)
-        self._key_index.observe_put(pending_key, revision)
-        claimed_key = self._claimed_key(node_id, item.token)
-        doc, rev = await kv_get_json(self._kv, claimed_key)
-        if doc is None:
+    async def _requeue_claim_doc(self, node_id: str, claimed_key: str, doc: dict, rev: int) -> None:
+        email = doc.get("email")
+        claim_epoch = int(doc.get("epoch", 0))
+        if not isinstance(email, str) or claim_epoch != await self._epoch(node_id):
+            try:
+                await self._kv.delete(claimed_key, last=rev)
+            except Exception:
+                pass
             return
+        desired_key = self._desired_key(node_id, email)
+        desired, _ = await kv_get_json(self._kv, desired_key)
+        if desired is None or int(desired.get("epoch", -1)) != claim_epoch:
+            try:
+                await self._kv.delete(claimed_key, last=rev)
+            except Exception:
+                pass
+            return
+        pending_key = self._pending_key(node_id, email)
+        pending_revision = await kv_put_json(self._kv, pending_key, desired)
+        self._key_index.observe_put(pending_key, pending_revision)
+        current_desired, _ = await kv_get_json(self._kv, desired_key)
+        if (
+            await self._epoch(node_id) != claim_epoch
+            or current_desired is None
+            or current_desired.get("intent_id") != desired.get("intent_id")
+        ):
+            try:
+                await self._kv.delete(pending_key, last=pending_revision)
+            except Exception:
+                pass
         try:
             await self._kv.delete(claimed_key, last=rev)
         except Exception as exc:
             logger.debug("Failed to delete requeued claim key=%s: %s", claimed_key, exc)
 
+    async def _requeue_one(self, node_id: str, item: ClaimedUser) -> None:
+        claimed_key = self._claimed_key(node_id, item.token)
+        doc, rev = await kv_get_json(self._kv, claimed_key)
+        if doc is None:
+            return
+        await self._requeue_claim_doc(node_id, claimed_key, doc, rev)
+
     async def requeue_users(self, node_id: str, claimed_users: list[ClaimedUser]) -> None:
         if not claimed_users:
             return
         await self._run_bounded(lambda item: self._requeue_one(node_id, item), claimed_users)
+
+    async def resolve_claims(self, node_id: str, claimed_users: list[ClaimedUser]) -> list[ClaimedUser]:
+        epoch = await self._epoch(node_id)
+        resolved: list[ClaimedUser] = []
+        for item in claimed_users:
+            claim, _ = await kv_get_json(self._kv, self._claimed_key(node_id, item.token))
+            if claim is None or int(claim.get("epoch", -1)) != epoch:
+                continue
+            email = claim.get("email")
+            if not isinstance(email, str):
+                continue
+            desired, _ = await kv_get_json(self._kv, self._desired_key(node_id, email))
+            if desired is None or int(desired.get("epoch", -1)) != epoch:
+                continue
+            user_b64 = desired.get("user")
+            if not isinstance(user_b64, str):
+                continue
+            resolved.append(
+                ClaimedUser(
+                    token=item.token,
+                    user=_user_from_b64(user_b64),
+                    epoch=epoch,
+                    intent_id=str(desired.get("intent_id", "")),
+                )
+            )
+        return resolved
 
     async def _clear_one(self, key: str) -> None:
         doc, rev = await kv_get_json(self._kv, key)
@@ -270,7 +362,8 @@ class NatsUserSyncStore:
             logger.debug("Failed to clear key=%s: %s", key, exc)
 
     async def clear(self, node_id: str) -> None:
-        prefixes = (self._pending_prefix(node_id), self._claimed_prefix(node_id))
+        epoch = await self._advance_epoch(node_id)
+        prefixes = (self._pending_prefix(node_id), self._claimed_prefix(node_id), self._desired_prefix(node_id))
         if isinstance(self._kv, KeyValue):
             keys, revision = await self._key_index.snapshot(prefixes)
             # Include acknowledged writes from other workers even if their live
@@ -288,8 +381,20 @@ class NatsUserSyncStore:
             finally:
                 await watcher.stop()
         else:
-            keys = set(await kv_list_keys(self._kv, prefixes[0])) | set(await kv_list_keys(self._kv, prefixes[1]))
-        await self._run_bounded(self._clear_one, keys)
+            keys = set()
+            for prefix in prefixes:
+                keys.update(await kv_list_keys(self._kv, prefix))
+
+        async def clear_stale(key: str) -> None:
+            doc, rev = await kv_get_json(self._kv, key)
+            if doc is None or int(doc.get("epoch", 0)) >= epoch:
+                return
+            try:
+                await self._kv.delete(key, last=rev)
+            except Exception as exc:
+                logger.debug("Failed to clear stale key=%s: %s", key, exc)
+
+        await self._run_bounded(clear_stale, keys)
 
 
 class NatsNodeLifecycleCoordinator:

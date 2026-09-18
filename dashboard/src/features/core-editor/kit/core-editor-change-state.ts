@@ -1,6 +1,7 @@
 import type { CoreEditorStoreState } from '@/features/core-editor/state/core-editor-store'
 import { profileToPersistedConfig } from '@/features/core-editor/kit/xray-adapter'
 import { draftToPersistedConfig } from '@/features/core-editor/kit/wireguard-adapter'
+import { amneziaWGDraftToConfig } from '@/features/core-editor/kit/amneziawg-adapter'
 
 function stableStringify(value: unknown): string {
   try {
@@ -24,6 +25,14 @@ function sameStringArray(a: string[], b: string[]): boolean {
 }
 
 function currentConfigString(s: CoreEditorStoreState): string {
+  if (s.kind === 'awg') {
+    if (!s.monacoDirty && s.awgDraft) return safeConfigString('awg_current_config', () => amneziaWGDraftToConfig(s.awgDraft!))
+    try {
+      return stableStringify(JSON.parse(s.monacoJson))
+    } catch {
+      return `__invalid_monaco_json__:${s.monacoJson}`
+    }
+  }
   if (s.monacoDirty) {
     try {
       return stableStringify(JSON.parse(s.monacoJson))
@@ -43,6 +52,14 @@ function currentConfigString(s: CoreEditorStoreState): string {
 }
 
 function baselineConfigString(s: CoreEditorStoreState): string {
+  if (s.kind === 'awg') {
+    if (s.awgBaseline) return safeConfigString('awg_baseline_config', () => amneziaWGDraftToConfig(s.awgBaseline!))
+    try {
+      return stableStringify(JSON.parse(s.persistedSnapshot?.monacoJson ?? '{}'))
+    } catch {
+      return s.persistedSnapshot?.monacoJson ?? ''
+    }
+  }
   if (s.kind === 'wg' && s.wgBaseline) {
     const draft = s.wgBaseline
     return safeConfigString('wg_baseline_config', () => draftToPersistedConfig(draft))

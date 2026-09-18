@@ -67,6 +67,17 @@ class TLSConfig(BaseModel):
     model_config = {"validate_assignment": True}
 
 
+class NativeSubscriptionConfig(BaseModel):
+    """One exact native client profile exposed to an authenticated panel operator."""
+
+    name: str
+    config: str
+
+
+class NativeSubscriptionConfigList(BaseModel):
+    configs: list[NativeSubscriptionConfig] = Field(default_factory=list)
+
+
 # ========== Transport-Specific Models (Only relevant fields) ==========
 
 
@@ -279,6 +290,11 @@ class SubscriptionInboundData(BaseModel):
     wireguard_mtu: int | None = Field(default=None)
     wireguard_reserved: str | None = Field(default=None)
     wireguard_dns: list[str] | None = Field(default=None)
+    backend_type: str | None = Field(default=None)
+    renderer: str | None = Field(default=None)
+    amneziawg_schema_version: int | None = Field(default=None)
+    amneziawg_implementation: str | None = Field(default=None)
+    amneziawg_parameters: dict[str, Any] = Field(default_factory=dict)
 
     # Flow (from inbound, user can override)
     inbound_flow: str = Field("")

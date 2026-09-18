@@ -232,7 +232,7 @@
                 text-overflow: ellipsis;
             }
 
-            .copy-button, .qr-button {
+            .copy-button, .qr-button, .native-config-button {
                 background: hsl(var(--primary));
                 color: hsl(var(--primary-foreground));
                 border: none;
@@ -244,8 +244,46 @@
                 transition: background-color 0.2s;
             }
 
-            .copy-button:hover, .qr-button:hover {
+            .copy-button:hover, .qr-button:hover, .native-config-button:hover {
                 background: hsl(var(--primary) / 0.9);
+            }
+
+            .native-config-item {
+                background: hsl(var(--card));
+                border: 1px solid hsl(var(--border));
+                border-radius: 6px;
+                padding: 10px;
+                margin-bottom: 10px;
+            }
+
+            .native-config-name {
+                display: block;
+                margin-bottom: 8px;
+                color: hsl(var(--foreground));
+                font-size: 0.85rem;
+                font-weight: 600;
+                overflow-wrap: anywhere;
+            }
+
+            .native-config-input {
+                width: 100%;
+                min-height: 12rem;
+                resize: vertical;
+                border: 1px solid hsl(var(--border));
+                border-radius: 4px;
+                background: hsl(var(--input));
+                color: hsl(var(--foreground));
+                padding: 8px;
+                font-family: ui-monospace, 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
+                font-size: 0.75rem;
+                white-space: pre;
+            }
+
+            .native-config-actions {
+                display: grid;
+                grid-template-columns: repeat(3, minmax(0, 1fr));
+                gap: 6px;
+                margin-top: 8px;
             }
 
             .copy-all-button {
@@ -618,6 +656,23 @@
                     Copy All Links
                 </button>
             </div>
+
+            {% if native_configs %}
+            <div class="links-section native-configs-section">
+                <h2>AmneziaWG Native Configs</h2>
+                {% for native in native_configs %}
+                <div class="native-config-item" data-name="{{ native.name | e }}">
+                    <span class="native-config-name">{{ native.name | e }}</span>
+                    <textarea class="native-config-input" readonly>{{ native.config | e }}</textarea>
+                    <div class="native-config-actions">
+                        <button type="button" class="native-config-button" onclick="copyNativeConfig(this)">Copy</button>
+                        <button type="button" class="native-config-button" onclick="showNativeConfigQr(this)">QR Code</button>
+                        <button type="button" class="native-config-button" onclick="downloadNativeConfig(this)">Download</button>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
             {% endif %}
 
             {% if apps %}
@@ -736,21 +791,63 @@
             const qrButtons = document.querySelectorAll(".qr-button");
             const qrPopup = document.getElementById("qrPopup");
 
+            function showQr(value) {
+                while (qrCodeContainer.firstChild) {
+                    qrCodeContainer.removeChild(qrCodeContainer.firstChild);
+                }
+                new QRCode(qrCodeContainer, {
+                    text: value,
+                    width: 256,
+                    height: 256,
+                    correctLevel: QRCode.CorrectLevel.L,
+                });
+                qrPopup.style.display = "block";
+            }
+
             qrButtons.forEach((qrButton) => {
                 qrButton.addEventListener("click", () => {
-                    const link = qrButton.dataset.link;
-                    while (qrCodeContainer.firstChild) {
-                        qrCodeContainer.removeChild(qrCodeContainer.firstChild);
-                    }
-                    const qrCode = new QRCode(qrCodeContainer, {
-                        text: link,
-                        width: 256,
-                        height: 256,
-                        correctLevel: QRCode.CorrectLevel.L,
-                    });
-                    qrPopup.style.display = "block";
+                    showQr(qrButton.dataset.link);
                 });
             });
+
+            function nativeConfigParts(button) {
+                const item = button.closest(".native-config-item");
+                return {
+                    config: item.querySelector(".native-config-input").value,
+                    name: item.dataset.name,
+                };
+            }
+
+            function copyNativeConfig(button) {
+                const config = nativeConfigParts(button).config;
+                const tempInput = document.createElement("textarea");
+                tempInput.value = config;
+                document.body.appendChild(tempInput);
+                tempInput.select();
+                document.execCommand("copy");
+                document.body.removeChild(tempInput);
+                button.textContent = "Copied!";
+                setTimeout(function () {
+                    button.textContent = "Copy";
+                }, 1500);
+            }
+
+            function showNativeConfigQr(button) {
+                showQr(nativeConfigParts(button).config);
+            }
+
+            function downloadNativeConfig(button) {
+                const native = nativeConfigParts(button);
+                const href = URL.createObjectURL(new Blob([native.config], { type: "text/plain;charset=utf-8" }));
+                const anchor = document.createElement("a");
+                anchor.href = href;
+                anchor.download = native.name;
+                document.body.appendChild(anchor);
+                anchor.click();
+                document.body.removeChild(anchor);
+                URL.revokeObjectURL(href);
+            }
+
             function closeQrPopup() {
                 document.getElementById("qrPopup").style.display = "none";
             }

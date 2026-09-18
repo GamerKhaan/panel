@@ -260,7 +260,8 @@ export default function NodeActionsMenu({
     syncNodeSnapshot(node)
   }, [node])
 
-  const isWireGuard = coresData?.cores?.find(core => core.id === node.core_config_id)?.type === 'wg'
+  const selectedCoreType = coresData?.cores?.find(core => core.id === node.core_config_id)?.type
+  const isWireGuard = selectedCoreType === 'wg' || selectedCoreType === 'gamerkhaan_amneziawg'
   const hasRowActions = canUpdate || canDelete || canReconnect || canUpdateCore || canReadStats
   const primaryActionCount = canUpdate ? 2 : 0
   const secondaryActionCount = (canReadStats ? 1 : 0) + (canUpdate ? 2 : 0) + (canReconnect ? 1 : 0)

@@ -18,6 +18,7 @@ from app.subscription.config_cache import get_sub_config, make_sub_config_key, p
 from app.utils.system import readable_size
 
 from . import (
+    AmneziaWGConfiguration,
     ClashConfiguration,
     ClashMetaConfiguration,
     OutlineConfiguration,
@@ -70,6 +71,8 @@ def _build_subscription_config(
         return OutlineConfiguration()
     if config_format == "wireguard":
         return WireGuardConfiguration()
+    if config_format == "amneziawg":
+        return AmneziaWGConfiguration()
     if config_format == "xray":
         return XrayConfiguration(
             xray_template_content=client_templates["XRAY_SUBSCRIPTION_TEMPLATE"],
@@ -445,6 +448,11 @@ async def process_inbounds_and_tags(
 
         inbound_copy: SubscriptionInboundData
         inbound_copy, settings = result
+
+        is_awg = inbound_copy.backend_type == "gamerkhaan_amneziawg"
+        if is_awg != isinstance(conf, AmneziaWGConfiguration):
+            # AWG parameters must never be downgraded into generic WG/client formats.
+            continue
 
         # Format remark and address with user variables
         remark = inbound_copy.remark.format_map(format_variables)

@@ -112,6 +112,9 @@ async def _prepare_subscription_inbound_data(
         reserved = wg_over.reserved.strip() if wg_over.reserved else None
 
         dns = list(wg_over.dns) if wg_over.dns else None
+        pre_shared_key = inbound_config.get("pre_shared_key")
+        if pre_shared_key is None:
+            pre_shared_key = ""
 
         return SubscriptionInboundData(
             remark=host.remark,
@@ -124,13 +127,18 @@ async def _prepare_subscription_inbound_data(
             transport_config=TCPTransportConfig(path="", host=[]),
             mux_settings=None,
             wireguard_public_key=inbound_config.get("public_key", ""),
-            wireguard_pre_shared_key=inbound_config.get("pre_shared_key", None),
+            wireguard_pre_shared_key=pre_shared_key,
             wireguard_local_address=inbound_config.get("address", []) or [],
             wireguard_allowed_ips=allowed_ips,
             wireguard_keepalive=keepalive,
             wireguard_mtu=wg_over.mtu,
             wireguard_reserved=reserved,
             wireguard_dns=dns,
+            backend_type=inbound_config.get("backend_type"),
+            renderer=inbound_config.get("renderer"),
+            amneziawg_schema_version=inbound_config.get("schema_version"),
+            amneziawg_implementation=inbound_config.get("implementation"),
+            amneziawg_parameters=deepcopy(inbound_config.get("awg") or {}),
             fragment_settings=host.fragment_settings.model_dump() if host.fragment_settings else None,
             noise_settings=host.noise_settings.model_dump() if host.noise_settings else None,
             finalmask=final_mask_settings,

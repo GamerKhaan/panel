@@ -7,6 +7,7 @@ from base64 import b64encode
 from copy import deepcopy
 from datetime import UTC, datetime, timedelta, timezone
 from hashlib import sha256
+from html import unescape
 from math import ceil
 from unittest.mock import AsyncMock, MagicMock
 from urllib.parse import parse_qs, unquote, urlsplit
@@ -970,10 +971,25 @@ def test_user_subscriptions(access_token):
         payload={"username": unique_name("test_user_subscriptions")},
     )
     try:
+        public_page = None
         for usf in user_subscription_formats:
             url = f"{user['subscription_url']}/{usf}"
             response = client.get(url, headers={"Accept": "text/html"} if usf == "" else None)
             assert response.status_code == status.HTTP_200_OK
+            if usf == "":
+                public_page = response
+
+        assert public_page is not None
+        generic_links = client.get(f"{user['subscription_url']}/links")
+        assert generic_links.status_code == status.HTTP_200_OK
+        xray_links = [
+            link
+            for link in generic_links.text.splitlines()
+            if link.startswith(("vless://", "vmess://", "trojan://", "ss://"))
+        ]
+        assert xray_links
+        rendered_page = unescape(public_page.text)
+        assert all(link in rendered_page for link in xray_links)
     finally:
         delete_user(access_token, user["username"])
         for host in hosts:
@@ -1332,6 +1348,10 @@ def test_wireguard_subscription_outputs_are_consistent(access_token):
 
         link = links_response.text.strip()
         assert link.startswith("wireguard://")
+
+        public_page = client.get(user["subscription_url"], headers={"Accept": "text/html"})
+        assert public_page.status_code == status.HTTP_200_OK
+        assert link in unescape(public_page.text)
 
         parsed = urlsplit(link)
         query = parse_qs(parsed.query)

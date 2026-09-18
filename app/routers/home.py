@@ -15,4 +15,8 @@ async def base():
 
 @router.get("/health", response_model=dict, status_code=status.HTTP_200_OK)
 async def health():
-    return {"status": "ok"}
+    return {
+        "status": "ok",
+        "managed_release": "v5.4.1-awg31-rc.3",
+        "schema_head": "pgawg0003",
+    }

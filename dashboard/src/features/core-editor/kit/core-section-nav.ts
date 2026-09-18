@@ -1,6 +1,6 @@
 import type { LucideIcon } from 'lucide-react'
 import { ArrowDownToLine, ArrowUpFromLine, Braces, Cable, Globe, Link2, Scale, Waypoints } from 'lucide-react'
-import type { WgCoreSection, XrayCoreSection } from '@/features/core-editor/state/core-editor-store'
+import type { AwgCoreSection, WgCoreSection, XrayCoreSection } from '@/features/core-editor/state/core-editor-store'
 
 export type XraySectionNavItem = {
   id: XrayCoreSection
@@ -29,4 +29,9 @@ export const XRAY_CORE_SECTION_NAV: XraySectionNavItem[] = [
 export const WG_CORE_SECTION_NAV: WgSectionNavItem[] = [
   { id: 'interface', labelKey: 'coreEditor.section.interface', defaultLabel: 'Interface', icon: Cable },
   { id: 'advanced', labelKey: 'coreEditor.section.advanced', defaultLabel: 'Advanced', icon: Braces },
+]
+
+export const AWG_CORE_SECTION_NAV: Array<{ id: AwgCoreSection; labelKey: string; defaultLabel: string; icon: LucideIcon }> = [
+  { id: 'interface', labelKey: 'coreEditor.section.interface', defaultLabel: 'Interface', icon: Cable },
+  { id: 'advanced', labelKey: 'coreEditor.section.advanced', defaultLabel: 'AmneziaWG / Advanced', icon: Braces },
 ]

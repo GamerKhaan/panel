@@ -1411,6 +1411,7 @@ export const ConfigFormat = {
   links_base64: 'links_base64',
   xray: 'xray',
   wireguard: 'wireguard',
+  amneziawg: 'amneziawg',
   sing_box: 'sing_box',
   clash: 'clash',
   clash_meta: 'clash_meta',
@@ -1430,6 +1431,7 @@ export type CoreType = typeof CoreType[keyof typeof CoreType];
 export const CoreType = {
   xray: 'xray',
   wg: 'wg',
+  gamerkhaan_amneziawg: 'gamerkhaan_amneziawg',
   mtproto: 'mtproto',
   singbox: 'singbox',
 } as const;
@@ -2141,6 +2143,7 @@ export interface SubFormatEnable {
   links_base64?: boolean;
   xray?: boolean;
   wireguard?: boolean;
+  amneziawg?: boolean;
   sing_box?: boolean;
   clash?: boolean;
   clash_meta?: boolean;

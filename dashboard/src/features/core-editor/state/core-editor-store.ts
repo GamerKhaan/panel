@@ -1,15 +1,17 @@
-import type { CoreKind } from '@pasarguard/core-kit'
 import type { Profile } from '@pasarguard/xray-config-kit'
 import type { WireGuardCoreDraft } from '@pasarguard/wireguard-config-kit'
 import { create } from 'zustand'
 import type { CoreResponse } from '@/service/api'
-import { apiCoreTypeToKind } from '../kit/core-kind'
+import { apiCoreTypeToKind, type PanelCoreKind } from '../kit/core-kind'
 import { createNewXrayProfile, importRawToProfile, profileToPersistedConfig } from '../kit/xray-adapter'
 import { createNewWireGuardDraft, draftToPersistedConfig, wireGuardConfigToDraft } from '../kit/wireguard-adapter'
+import type { AmneziaWGCoreDraft } from '../kit/amneziawg-adapter'
+import { amneziaWGConfigToDraft, amneziaWGDraftToConfig, createNewAmneziaWGDraft } from '../kit/amneziawg-adapter'
 
 export type XrayCoreSection = 'bindings' | 'inbounds' | 'outbounds' | 'routing' | 'balancers' | 'dns' | 'advanced'
 
 export type WgCoreSection = 'interface' | 'advanced'
+export type AwgCoreSection = 'interface' | 'advanced'
 
 function cloneProfile(p: Profile): Profile {
   return JSON.parse(JSON.stringify(p)) as Profile
@@ -19,14 +21,19 @@ function cloneWg(d: WireGuardCoreDraft): WireGuardCoreDraft {
   return JSON.parse(JSON.stringify(d)) as WireGuardCoreDraft
 }
 
+function cloneAwg(d: AmneziaWGCoreDraft): AmneziaWGCoreDraft {
+  return JSON.parse(JSON.stringify(d)) as AmneziaWGCoreDraft
+}
+
 export interface PersistedSnapshot {
-  kind: CoreKind
+  kind: PanelCoreKind
   coreName: string
   fallbacksInboundTags: string[]
   excludeInboundTags: string[]
   xrayProfile: Profile | null
   wgDraft: WireGuardCoreDraft | null
-  activeSection: XrayCoreSection | WgCoreSection
+  awgDraft: AmneziaWGCoreDraft | null
+  activeSection: XrayCoreSection | WgCoreSection | AwgCoreSection
   monacoJson: string
   xrayImportWarnings: string[]
   /** Last `JSON.stringify(core.config)` from the API used to hydrate this draft (clean-state refetch sync). */
@@ -41,6 +48,7 @@ function captureSnapshot(s: CoreEditorStoreState): PersistedSnapshot {
     excludeInboundTags: [...s.excludeInboundTags],
     xrayProfile: s.xrayProfile ? cloneProfile(s.xrayProfile) : null,
     wgDraft: s.wgDraft ? cloneWg(s.wgDraft) : null,
+    awgDraft: s.awgDraft ? cloneAwg(s.awgDraft) : null,
     activeSection: s.activeSection,
     monacoJson: s.monacoJson,
     xrayImportWarnings: [...s.xrayImportWarnings],
@@ -49,14 +57,24 @@ function captureSnapshot(s: CoreEditorStoreState): PersistedSnapshot {
 }
 
 /** Legacy snapshots used `overview`; map to current sections. */
-function normalizePersistedActiveSection(snapshot: PersistedSnapshot): XrayCoreSection | WgCoreSection {
+function normalizePersistedActiveSection(snapshot: PersistedSnapshot): XrayCoreSection | WgCoreSection | AwgCoreSection {
   const s = snapshot.activeSection as string
   if (snapshot.kind === 'wg' && s === 'overview') return 'interface'
   if (snapshot.kind === 'xray' && s === 'overview') return 'bindings'
+  if (snapshot.kind === 'awg' && s === 'json') return 'interface'
   return snapshot.activeSection
 }
 
 function applyPersistedSnapshot(snapshot: PersistedSnapshot): Partial<CoreEditorStoreState> {
+  if (snapshot.kind === 'awg') {
+    const d = snapshot.awgDraft ? cloneAwg(snapshot.awgDraft) : null
+    return {
+      kind: 'awg', coreName: snapshot.coreName, fallbacksInboundTags: [], excludeInboundTags: [],
+      xrayProfile: null, xrayBaseline: null, wgDraft: null, wgBaseline: null, awgDraft: d, awgBaseline: d ? cloneAwg(d) : null,
+      activeSection: normalizePersistedActiveSection(snapshot), monacoJson: snapshot.monacoJson, monacoDirty: false,
+      xrayImportWarnings: [], serverHydratedConfigJson: snapshot.serverHydratedConfigJson ?? null, dirty: false,
+    }
+  }
   if (snapshot.kind === 'wg' && snapshot.wgDraft) {
     const d = cloneWg(snapshot.wgDraft)
     return {
@@ -68,6 +86,8 @@ function applyPersistedSnapshot(snapshot: PersistedSnapshot): Partial<CoreEditor
       xrayBaseline: null,
       wgDraft: d,
       wgBaseline: cloneWg(d),
+      awgDraft: null,
+      awgBaseline: null,
       activeSection: normalizePersistedActiveSection(snapshot),
       monacoJson: snapshot.monacoJson,
       monacoDirty: false,
@@ -87,6 +107,8 @@ function applyPersistedSnapshot(snapshot: PersistedSnapshot): Partial<CoreEditor
       xrayBaseline: cloneProfile(p),
       wgDraft: null,
       wgBaseline: null,
+      awgDraft: null,
+      awgBaseline: null,
       activeSection: normalizePersistedActiveSection(snapshot),
       monacoJson: snapshot.monacoJson,
       monacoDirty: false,
@@ -103,7 +125,7 @@ export interface CoreEditorStoreState {
   isNew: boolean
   coreId: number | null
   coreName: string
-  kind: CoreKind
+  kind: PanelCoreKind
   restartNodes: boolean
   fallbacksInboundTags: string[]
   excludeInboundTags: string[]
@@ -111,7 +133,9 @@ export interface CoreEditorStoreState {
   xrayBaseline: Profile | null
   wgDraft: WireGuardCoreDraft | null
   wgBaseline: WireGuardCoreDraft | null
-  activeSection: XrayCoreSection | WgCoreSection
+  awgDraft: AmneziaWGCoreDraft | null
+  awgBaseline: AmneziaWGCoreDraft | null
+  activeSection: XrayCoreSection | WgCoreSection | AwgCoreSection
   dirty: boolean
   monacoJson: string
   monacoDirty: boolean
@@ -121,10 +145,10 @@ export interface CoreEditorStoreState {
   persistedSnapshot: PersistedSnapshot | null
 
   initFromCore: (core: CoreResponse, options?: { preserveNavigation?: boolean }) => void
-  initNew: (kind: CoreKind, name?: string) => void
+  initNew: (kind: PanelCoreKind, name?: string) => void
   reset: () => void
   setCoreName: (name: string) => void
-  setActiveSection: (s: XrayCoreSection | WgCoreSection) => void
+  setActiveSection: (s: XrayCoreSection | WgCoreSection | AwgCoreSection) => void
   setRestartNodes: (v: boolean) => void
   setFallbacksInboundTags: (tags: string[]) => void
   setExcludeInboundTags: (tags: string[]) => void
@@ -132,15 +156,17 @@ export interface CoreEditorStoreState {
   updateXrayProfile: (updater: (p: Profile) => Profile) => void
   setWgDraft: (d: WireGuardCoreDraft) => void
   updateWgDraft: (updater: (d: WireGuardCoreDraft) => WireGuardCoreDraft) => void
+  setAwgDraft: (d: AmneziaWGCoreDraft) => void
+  updateAwgDraft: (updater: (d: AmneziaWGCoreDraft) => AmneziaWGCoreDraft) => void
   markClean: () => void
   discardDraft: () => void
-  switchKind: (nextKind: CoreKind) => void
+  switchKind: (nextKind: PanelCoreKind) => void
   setMonacoJson: (json: string, opts?: { dirty?: boolean }) => void
   syncMonacoFromDraft: () => void
   applyMonacoJson: () => { ok: true } | { ok: false; error: string }
 }
 
-const defaultSection = (kind: CoreKind): XrayCoreSection | WgCoreSection => (kind === 'wg' ? 'interface' : 'inbounds')
+const defaultSection = (kind: PanelCoreKind): XrayCoreSection | WgCoreSection | AwgCoreSection => (kind === 'wg' || kind === 'awg' ? 'interface' : 'inbounds')
 
 export const useCoreEditorStore = create<CoreEditorStoreState>((set, get) => ({
   hydrated: false,
@@ -155,6 +181,8 @@ export const useCoreEditorStore = create<CoreEditorStoreState>((set, get) => ({
   xrayBaseline: null,
   wgDraft: null,
   wgBaseline: null,
+  awgDraft: null,
+  awgBaseline: null,
   activeSection: 'inbounds',
   dirty: false,
   monacoJson: '{}',
@@ -172,6 +200,19 @@ export const useCoreEditorStore = create<CoreEditorStoreState>((set, get) => ({
     const serverJson = JSON.stringify(core.config)
     const nav =
       preserveNavigation && prev && prev.coreId === core.id ? { activeSection: prev.activeSection, restartNodes: prev.restartNodes } : { activeSection: defaultSection(kind), restartNodes: true }
+    if (kind === 'awg') {
+      const parsed = amneziaWGConfigToDraft(core.config)
+      const draft = parsed.ok ? parsed.draft : null
+      set({
+        hydrated: true, isNew: false, coreId: core.id, coreName: core.name, kind,
+        restartNodes: nav.restartNodes, fallbacksInboundTags: [], excludeInboundTags: [],
+        xrayProfile: null, xrayBaseline: null, wgDraft: null, wgBaseline: null, awgDraft: draft, awgBaseline: draft ? cloneAwg(draft) : null,
+        activeSection: nav.activeSection === 'advanced' ? 'advanced' : 'interface', dirty: false, monacoJson: JSON.stringify(core.config, null, 2),
+        monacoDirty: false, xrayImportWarnings: parsed.ok ? [] : [parsed.message], serverHydratedConfigJson: serverJson,
+      })
+      set({ persistedSnapshot: captureSnapshot(get()) })
+      return
+    }
     if (kind === 'wg') {
       const parsed = wireGuardConfigToDraft(core.config)
       if (!parsed.ok) {
@@ -213,6 +254,8 @@ export const useCoreEditorStore = create<CoreEditorStoreState>((set, get) => ({
         xrayBaseline: null,
         wgDraft: draft,
         wgBaseline: cloneWg(draft),
+        awgDraft: null,
+        awgBaseline: null,
         activeSection: nav.activeSection,
         dirty: false,
         monacoJson: JSON.stringify(draftToPersistedConfig(draft), null, 2),
@@ -238,6 +281,8 @@ export const useCoreEditorStore = create<CoreEditorStoreState>((set, get) => ({
       xrayBaseline: cloneProfile(p),
       wgDraft: null,
       wgBaseline: null,
+      awgDraft: null,
+      awgBaseline: null,
       activeSection: nav.activeSection,
       dirty: false,
       monacoJson: JSON.stringify(profileToPersistedConfig(p), null, 2),
@@ -249,6 +294,12 @@ export const useCoreEditorStore = create<CoreEditorStoreState>((set, get) => ({
   },
 
   initNew: (kind, name = '') => {
+    if (kind === 'awg') {
+      const draft = createNewAmneziaWGDraft()
+      set({ hydrated: true, isNew: true, coreId: null, coreName: name, kind, restartNodes: true, fallbacksInboundTags: [], excludeInboundTags: [], xrayProfile: null, xrayBaseline: null, wgDraft: null, wgBaseline: null, awgDraft: draft, awgBaseline: cloneAwg(draft), activeSection: 'interface', dirty: false, monacoJson: JSON.stringify(amneziaWGDraftToConfig(draft), null, 2), monacoDirty: false, xrayImportWarnings: [], serverHydratedConfigJson: null })
+      set({ persistedSnapshot: captureSnapshot(get()) })
+      return
+    }
     if (kind === 'wg') {
       const draft = createNewWireGuardDraft()
       set({
@@ -264,6 +315,8 @@ export const useCoreEditorStore = create<CoreEditorStoreState>((set, get) => ({
         xrayBaseline: null,
         wgDraft: draft,
         wgBaseline: cloneWg(draft),
+        awgDraft: null,
+        awgBaseline: null,
         activeSection: defaultSection(kind),
         dirty: false,
         monacoJson: JSON.stringify(draftToPersistedConfig(draft), null, 2),
@@ -288,6 +341,8 @@ export const useCoreEditorStore = create<CoreEditorStoreState>((set, get) => ({
       xrayBaseline: cloneProfile(p),
       wgDraft: null,
       wgBaseline: null,
+      awgDraft: null,
+      awgBaseline: null,
       activeSection: defaultSection(kind),
       dirty: false,
       monacoJson: JSON.stringify(profileToPersistedConfig(p), null, 2),
@@ -312,6 +367,8 @@ export const useCoreEditorStore = create<CoreEditorStoreState>((set, get) => ({
       xrayBaseline: null,
       wgDraft: null,
       wgBaseline: null,
+      awgDraft: null,
+      awgBaseline: null,
       activeSection: 'inbounds',
       dirty: false,
       monacoJson: '{}',
@@ -357,13 +414,26 @@ export const useCoreEditorStore = create<CoreEditorStoreState>((set, get) => ({
     get().syncMonacoFromDraft()
   },
 
+  setAwgDraft: awgDraft => {
+    set({ awgDraft, dirty: true })
+    get().syncMonacoFromDraft()
+  },
+
+  updateAwgDraft: updater => {
+    const cur = get().awgDraft
+    if (!cur) return
+    set({ awgDraft: updater(cloneAwg(cur)), dirty: true })
+    get().syncMonacoFromDraft()
+  },
+
   markClean: () => {
-    const { kind, xrayProfile, wgDraft } = get()
+    const { kind, xrayProfile, wgDraft, awgDraft } = get()
     if (kind === 'wg' && wgDraft) {
       set({ wgBaseline: cloneWg(wgDraft), dirty: false, monacoDirty: false })
     } else if (kind === 'xray' && xrayProfile) {
       set({ xrayBaseline: cloneProfile(xrayProfile), dirty: false, monacoDirty: false })
     }
+    if (kind === 'awg' && awgDraft) set({ awgBaseline: cloneAwg(awgDraft), dirty: false, monacoDirty: false })
     get().syncMonacoFromDraft()
     set({ persistedSnapshot: captureSnapshot(get()) })
   },
@@ -389,12 +459,19 @@ export const useCoreEditorStore = create<CoreEditorStoreState>((set, get) => ({
         xrayBaseline: null,
         wgDraft: draft,
         wgBaseline: cloneWg(draft),
+        awgDraft: null,
+        awgBaseline: null,
         activeSection: defaultSection('wg'),
         dirty: true,
         monacoJson: JSON.stringify(draftToPersistedConfig(draft), null, 2),
         monacoDirty: false,
         xrayImportWarnings: [],
       })
+      return
+    }
+    if (nextKind === 'awg') {
+      const draft = createNewAmneziaWGDraft()
+      set({ kind: 'awg', fallbacksInboundTags: [], excludeInboundTags: [], xrayProfile: null, xrayBaseline: null, wgDraft: null, wgBaseline: null, awgDraft: draft, awgBaseline: cloneAwg(draft), activeSection: 'interface', dirty: true, monacoJson: JSON.stringify(amneziaWGDraftToConfig(draft), null, 2), monacoDirty: false, xrayImportWarnings: [] })
       return
     }
     const p = createNewXrayProfile()
@@ -406,6 +483,8 @@ export const useCoreEditorStore = create<CoreEditorStoreState>((set, get) => ({
       xrayBaseline: cloneProfile(p),
       wgDraft: null,
       wgBaseline: null,
+      awgDraft: null,
+      awgBaseline: null,
       activeSection: defaultSection('xray'),
       dirty: true,
       monacoJson: JSON.stringify(profileToPersistedConfig(p), null, 2),
@@ -417,12 +496,14 @@ export const useCoreEditorStore = create<CoreEditorStoreState>((set, get) => ({
   setMonacoJson: (monacoJson, opts) => set({ monacoJson, monacoDirty: opts?.dirty ?? true }),
 
   syncMonacoFromDraft: () => {
-    const { kind, xrayProfile, wgDraft } = get()
+    const { kind, xrayProfile, wgDraft, awgDraft } = get()
     try {
       if (kind === 'wg' && wgDraft) {
         set({ monacoJson: JSON.stringify(draftToPersistedConfig(wgDraft), null, 2), monacoDirty: false })
       } else if (kind === 'xray' && xrayProfile) {
         set({ monacoJson: JSON.stringify(profileToPersistedConfig(xrayProfile), null, 2), monacoDirty: false })
+      } else if (kind === 'awg' && awgDraft) {
+        set({ monacoJson: JSON.stringify(amneziaWGDraftToConfig(awgDraft), null, 2), monacoDirty: false })
       }
     } catch {
       /* keep previous monacoJson */
@@ -441,6 +522,13 @@ export const useCoreEditorStore = create<CoreEditorStoreState>((set, get) => ({
       const r = wireGuardConfigToDraft(parsed)
       if (!r.ok) return { ok: false, error: r.message }
       set({ wgDraft: r.draft, dirty: true, monacoDirty: false })
+      return { ok: true }
+    }
+    if (kind === 'awg') {
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return { ok: false, error: 'Configuration must be a JSON object' }
+      const r = amneziaWGConfigToDraft(parsed)
+      if (!r.ok) return { ok: false, error: r.message }
+      set({ awgDraft: r.draft, dirty: true, monacoDirty: false, xrayImportWarnings: [] })
       return { ok: true }
     }
     const { profile, issues } = importRawToProfile(parsed)

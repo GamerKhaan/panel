@@ -69,7 +69,7 @@ async def test_user_sync_enqueue_shards_per_email_key():
     claimed = await store.claim_users("1", "worker-a", limit=50, lease_seconds=30)
     assert len(claimed) == 50
     await store.clear("1")
-    assert kv._data == {}
+    assert set(kv._data) == {"e.1"}
 
 
 @pytest.mark.asyncio
@@ -92,7 +92,7 @@ async def test_bulk_sync_bounds_concurrent_writes_across_nodes():
     kv.create = slow_create
     users = [_user(f"user{i}") for i in range(200)]
     await asyncio.gather(*(store.enqueue_users(str(node), users) for node in range(4)))
-    assert len(kv._data) == 800
+    assert len(kv._data) == 1600
     assert 1 < peak <= 32
     assert active == 0
 
@@ -116,6 +116,31 @@ async def test_claim_cleans_up_claimed_key_when_pending_delete_fails():
     assert claimed == []
     assert not any(key.startswith("c.1.") for key in kv._data)
     assert any(key.startswith("p.1.") for key in kv._data)
+
+
+@pytest.mark.asyncio
+async def test_full_revoke_fences_claimed_and_expired_payloads():
+    store = NatsUserSyncStore(MemoryCasKv())
+    await store.enqueue_users("1", [_user("a@example.com", "obsolete")])
+    claimed = await store.claim_users("1", "old-worker", limit=1, lease_seconds=0)
+    assert len(claimed) == 1
+
+    await store.clear("1")
+    await store.requeue_users("1", claimed)
+    assert await store.resolve_claims("1", claimed) == []
+    assert await store.claim_users("1", "new-worker", limit=10, lease_seconds=30) == []
+
+
+@pytest.mark.asyncio
+async def test_failed_claim_requeues_current_authoritative_intent():
+    store = NatsUserSyncStore(MemoryCasKv())
+    await store.enqueue_users("1", [_user("a@example.com", "old")])
+    claimed = await store.claim_users("1", "old-worker", limit=1, lease_seconds=30)
+    await store.enqueue_users("1", [_user("a@example.com", "latest")])
+    await store.requeue_users("1", claimed)
+    current = await store.claim_users("1", "new-worker", limit=10, lease_seconds=30)
+    assert len(current) == 1
+    assert list(current[0].user.inbounds) == ["latest"]
 
 
 @pytest.mark.asyncio

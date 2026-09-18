@@ -1,4 +1,6 @@
+import io
 import re
+import zipfile
 from datetime import UTC, datetime as dt
 from json import dumps as json_dumps
 from typing import Any, ClassVar
@@ -17,7 +19,7 @@ from app.db.models import User
 from app.models.admin import AdminDetails
 from app.models.settings import Application, ConfigFormat, HWIDSettings, SubRule, Subscription as SubSettings
 from app.models.stats import UserUsageStatsList
-from app.models.subscription import SubscriptionUsageQuery
+from app.models.subscription import NativeSubscriptionConfig, NativeSubscriptionConfigList, SubscriptionUsageQuery
 from app.models.user import SubscriptionUserResponse, UsersResponseWithInbounds
 from app.settings import hwid_settings, subscription_settings
 from app.subscription import sub_update_buffer as _sub_update_buffer  # noqa: F401  # registers per-worker flush loop
@@ -74,6 +76,12 @@ client_config = {
     },
     ConfigFormat.wireguard: {
         "config_format": "wireguard",
+        "media_type": "application/zip",
+        "as_base64": False,
+        "extension": ".zip",
+    },
+    ConfigFormat.amneziawg: {
+        "config_format": "amneziawg",
         "media_type": "application/zip",
         "as_base64": False,
         "extension": ".zip",
@@ -454,12 +462,14 @@ class SubscriptionOperation(BaseOperation):
                 not is_hwid_enabled or not global_hwid_conf.require_hwid_for_manual_sub
             )
             links = []
+            native_configs: list[NativeSubscriptionConfig] = []
             if is_allow_browser_config:
-                conf, media_type = await self.fetch_config(
+                conf, _ = await self.fetch_config(
                     user,
                     ConfigFormat.links,
                 )
                 links = conf.splitlines()
+                native_configs = await self._native_amneziawg_configs(user)
 
             format_variables = await self.get_format_variables(user)
             formatted_announce = self._format_announce(sub_settings, format_variables)
@@ -468,7 +478,13 @@ class SubscriptionOperation(BaseOperation):
                 render_template(
                     template,
                     self._build_subscription_body_payload(
-                        user, links, formatted_announce, sub_settings, format_variables, is_hwid_enabled
+                        user,
+                        links,
+                        native_configs,
+                        formatted_announce,
+                        sub_settings,
+                        format_variables,
+                        is_hwid_enabled,
                     ),
                 )
             )
@@ -596,6 +612,7 @@ class SubscriptionOperation(BaseOperation):
         self,
         user: UsersResponseWithInbounds,
         links: list[str],
+        native_configs: list[NativeSubscriptionConfig],
         formatted_announce: str,
         sub_settings: SubSettings,
         format_variables: dict,
@@ -604,6 +621,7 @@ class SubscriptionOperation(BaseOperation):
         return {
             "user": SubscriptionUserResponse.model_validate(user),
             "links": links,
+            "native_configs": native_configs,
             "announce": formatted_announce,
             "announce_url": self._format_announce_url(sub_settings, format_variables),
             "apps": self._make_apps_import_urls(
@@ -617,6 +635,7 @@ class SubscriptionOperation(BaseOperation):
         self,
         user: UsersResponseWithInbounds,
         links: list[str],
+        native_configs: list[NativeSubscriptionConfig],
         formatted_announce: str,
         sub_settings: SubSettings,
         format_variables: dict,
@@ -625,7 +644,13 @@ class SubscriptionOperation(BaseOperation):
     ) -> dict[str, Any]:
         return {
             "body": self._build_subscription_body_payload(
-                user, links, formatted_announce, sub_settings, format_variables, is_hwid_enabled
+                user,
+                links,
+                native_configs,
+                formatted_announce,
+                sub_settings,
+                format_variables,
+                is_hwid_enabled,
             ),
             "headers": headers,
         }
@@ -637,9 +662,15 @@ class SubscriptionOperation(BaseOperation):
         is_hwid_enabled = await self.is_user_hwid_enabled(db_user)
 
         links = []
-        if sub_settings.allow_browser_config:
+        native_configs: list[NativeSubscriptionConfig] = []
+        global_hwid_conf: HWIDSettings = await hwid_settings()
+        is_allow_browser_config = sub_settings.allow_browser_config and (
+            not is_hwid_enabled or not global_hwid_conf.require_hwid_for_manual_sub
+        )
+        if is_allow_browser_config:
             conf, _ = await self.fetch_config(user, ConfigFormat.links)
             links = conf.splitlines()
+            native_configs = await self._native_amneziawg_configs(user)
         format_variables = await self.get_format_variables(user)
         formatted_announce = self._format_announce(sub_settings, format_variables)
         response_headers = self.create_response_headers(user, request_url, sub_settings)
@@ -656,6 +687,7 @@ class SubscriptionOperation(BaseOperation):
         return self._build_raw_subscription_payload(
             user,
             links,
+            native_configs,
             formatted_announce,
             sub_settings,
             format_variables,
@@ -696,6 +728,45 @@ class SubscriptionOperation(BaseOperation):
     ):
         db_user = await self.get_validated_user_by_id(db, user_id, admin)
         return await self.user_subscription_by_user(db_user, client_type, request_url)
+
+    async def user_amneziawg_configs_by_id(
+        self, db: AsyncSession, user_id: int, admin: AdminDetails
+    ) -> NativeSubscriptionConfigList:
+        """Return the exact native profiles produced by the public AWG renderer.
+
+        This is intentionally an authenticated panel endpoint. It does not bypass
+        the public subscription token/HWID path and it never converts AWG to a
+        WireGuard URI.
+        """
+        db_user = await self.get_validated_user_by_id(db, user_id, admin)
+        user = await self.validated_user(db_user)
+        return NativeSubscriptionConfigList(configs=await self._native_amneziawg_configs(user))
+
+    async def _native_amneziawg_configs(
+        self, user: UsersResponseWithInbounds
+    ) -> list[NativeSubscriptionConfig]:
+        """Extract bounded native profiles from the canonical AWG renderer."""
+        payload, media_type = await self.fetch_config(user, ConfigFormat.amneziawg)
+        if media_type != "application/zip" or not isinstance(payload, bytes):
+            await self.raise_error(message="Invalid AmneziaWG renderer output", code=500)
+        result: list[NativeSubscriptionConfig] = []
+        try:
+            with zipfile.ZipFile(io.BytesIO(payload), "r") as archive:
+                names = archive.namelist()
+                if "RENDERER" not in names or archive.read("RENDERER").decode("utf-8") != "amneziawg-native-v1\n":
+                    raise ValueError("unexpected renderer identity")
+                for name in names:
+                    if name == "RENDERER":
+                        continue
+                    if len(result) >= 64 or not name.endswith(".conf") or name != name.split("/")[-1]:
+                        raise ValueError("unsafe native profile archive")
+                    info = archive.getinfo(name)
+                    if info.file_size > 131072:
+                        raise ValueError("native profile is too large")
+                    result.append(NativeSubscriptionConfig(name=name, config=archive.read(name).decode("utf-8")))
+        except (ValueError, UnicodeDecodeError, zipfile.BadZipFile, KeyError) as exc:
+            await self.raise_error(message=f"Invalid AmneziaWG renderer archive: {exc}", code=500)
+        return result
 
     async def user_subscription_info(
         self, db: AsyncSession, token: str, ip: str | None = None

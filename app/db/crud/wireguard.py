@@ -279,7 +279,9 @@ def _peer_sort_key(entry: str) -> tuple[int, int]:
 
 
 async def get_wg_cores(db: AsyncSession) -> list[CoreConfig]:
-    result = await db.execute(select(CoreConfig).where(CoreConfig.type == CoreType.wg))
+    result = await db.execute(
+        select(CoreConfig).where(CoreConfig.type.in_((CoreType.wg, CoreType.gamerkhaan_amneziawg)))
+    )
     return list(result.scalars().all())
 
 

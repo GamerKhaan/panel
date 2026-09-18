@@ -64,7 +64,8 @@ export default function CoreConfigModal({ isDialogOpen, onOpenChange, form, edit
   const dir = useDirDetection()
   const isMobile = useIsMobile()
   const backendType = (form.watch('type') ?? 'xray') as CoreBackendType
-  const isXrayBackend = backendType !== 'wg'
+  const isWireGuardFamily = backendType === 'wg' || backendType === 'gamerkhaan_amneziawg'
+  const isXrayBackend = !isWireGuardFamily
   const [validation, setValidation] = useState<ValidationResult>({ isValid: true })
   const createCoreMutation = useCreateCoreConfig()
   const modifyCoreMutation = useModifyCoreConfig()
@@ -153,7 +154,7 @@ export default function CoreConfigModal({ isDialogOpen, onOpenChange, form, edit
       try {
         const parsedConfig = JSON.parse(value)
         const selectedBackendType = (form.getValues('type') ?? 'xray') as CoreBackendType
-        if (selectedBackendType === 'wg') {
+        if (selectedBackendType === 'wg' || selectedBackendType === 'gamerkhaan_amneziawg') {
           const interfaceName = typeof parsedConfig.interface_name === 'string' ? parsedConfig.interface_name.trim() : ''
           setInboundTags(interfaceName ? [interfaceName] : [])
         } else if (parsedConfig.inbounds && Array.isArray(parsedConfig.inbounds)) {
@@ -252,6 +253,22 @@ export default function CoreConfigModal({ isDialogOpen, onOpenChange, form, edit
         const keyPair = generateWireGuardKeyPair()
         setGeneratedWireGuardKeyPair(keyPair)
         defaultTemplate = createWireGuardCoreConfigJson(keyPair)
+      } else if (nextBackendType === 'gamerkhaan_amneziawg') {
+        const keyPair = generateWireGuardKeyPair()
+        setGeneratedWireGuardKeyPair(keyPair)
+        defaultTemplate = JSON.stringify(
+          {
+            schema_version: 1,
+            implementation: 'GamerKhaan/pasarguard-awg31-patch',
+            interface_name: 'awg0',
+            private_key: keyPair.privateKey,
+            listen_port: 51820,
+            address: ['10.70.0.1/24'],
+            awg: { jc: 0, jmin: 0, jmax: 0, s1: 16, s2: 20, s3: 12, s4: 24, h1: '10001-10010', h2: '20001-20010', h3: '30001-30010', h4: '40001-40010', content_padding_addition: '0-16', random_trailers: false, disable_cookies: false },
+          },
+          null,
+          2,
+        )
       } else {
         defaultTemplate = DEFAULT_XRAY_CORE_CONFIG_JSON
       }
@@ -326,8 +343,8 @@ export default function CoreConfigModal({ isDialogOpen, onOpenChange, form, edit
       }
 
       const backendType = values.type ?? 'xray'
-      const fallbackTags = backendType !== 'wg' ? values.fallback_id || [] : []
-      const excludeInboundTags = backendType !== 'wg' ? values.excluded_inbound_ids || [] : []
+      const fallbackTags = backendType === 'xray' ? values.fallback_id || [] : []
+      const excludeInboundTags = backendType === 'xray' ? values.excluded_inbound_ids || [] : []
 
       if (editingCore && editingCoreId) {
         // Update existing core
@@ -915,6 +932,7 @@ export default function CoreConfigModal({ isDialogOpen, onOpenChange, form, edit
                               <SelectContent>
                                 <SelectItem value="xray">Xray</SelectItem>
                                 <SelectItem value="wg">WireGuard</SelectItem>
+                                <SelectItem value="gamerkhaan_amneziawg">AmneziaWG</SelectItem>
                               </SelectContent>
                             </Select>
                           </FormControl>

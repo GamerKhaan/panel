@@ -1,4 +1,5 @@
 from .base import BaseSubscription
+from .amneziawg import AmneziaWGConfiguration
 from .clash import ClashConfiguration, ClashMetaConfiguration
 from .links import StandardLinks
 from .outline import OutlineConfiguration
@@ -8,6 +9,7 @@ from .xray import XrayConfiguration
 
 __all__ = [
     "BaseSubscription",
+    "AmneziaWGConfiguration",
     "ClashConfiguration",
     "ClashMetaConfiguration",
     "OutlineConfiguration",

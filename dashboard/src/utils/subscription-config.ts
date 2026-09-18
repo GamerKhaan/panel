@@ -1,6 +1,11 @@
 import { $fetch } from '@/service/http'
 
-export type SubscriptionContentFormat = 'links' | 'links_base64' | 'xray' | 'wireguard' | 'sing_box' | 'clash' | 'clash_meta' | 'outline'
+export type SubscriptionContentFormat = 'links' | 'links_base64' | 'xray' | 'wireguard' | 'amneziawg' | 'sing_box' | 'clash' | 'clash_meta' | 'outline'
+
+export interface NativeSubscriptionConfig {
+  name: string
+  config: string
+}
 
 const WIREGUARD_PROTOCOL = 'wireguard://'
 const TEXT_FILE_MIME_TYPE = 'text/plain;charset=utf-8'
@@ -179,6 +184,17 @@ export const fetchUserSubscriptionContent = (userId: number, format: Subscriptio
     responseType: 'text',
     timeout: timeoutMs,
   })
+
+export const fetchUserAmneziaWGConfigs = (userId: number, timeoutMs = 8000) =>
+  $fetch<{ configs: NativeSubscriptionConfig[] }>(`/api/user/${userId}/subscription/amneziawg-configs`, { timeout: timeoutMs })
+
+export const getAmneziaWGDownloadPayload = (name: string, config: string) => ({
+  content: config,
+  fileName: `${sanitizeFileNameSegment(name.replace(/\.conf$/i, '')) || 'amneziawg'}.conf`,
+  mimeType: WIREGUARD_CONFIG_MIME_TYPE,
+})
+
+export const getAmneziaWGQrValue = (config: string) => config
 
 export const extractNameFromConfigUrl = (url: string): string | null => {
   const trimmedUrl = url.trim()

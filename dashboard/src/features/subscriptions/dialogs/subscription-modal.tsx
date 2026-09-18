@@ -17,6 +17,9 @@ import {
   extractAddressFromConfigUrl,
   extractNameFromConfigUrl,
   fetchUserSubscriptionContent,
+  fetchUserAmneziaWGConfigs,
+  getAmneziaWGDownloadPayload,
+  getAmneziaWGQrValue,
   getWireGuardDownloadPayload,
   prepareSubscriptionContentForCopy,
   resolveSubscriptionQrUrl,
@@ -34,6 +37,7 @@ interface ConfigItem {
   config: string
   name: string
   address: string | null
+  kind: 'link' | 'amneziawg'
 }
 
 type ConfigCopyMode = 'config' | 'base64'
@@ -74,15 +78,19 @@ const SubscriptionModal: FC<SubscriptionModalProps> = memo(({ open, subscribeUrl
     setError(null)
 
     try {
-      const text = await fetchUserSubscriptionContent(userId, 'links', LINKS_FETCH_TIMEOUT_MS)
+      const [text, native] = await Promise.all([
+        fetchUserSubscriptionContent(userId, 'links', LINKS_FETCH_TIMEOUT_MS),
+        fetchUserAmneziaWGConfigs(userId, LINKS_FETCH_TIMEOUT_MS),
+      ])
       const configLines = text.split('\n').filter(line => line.trim() !== '')
 
       setConfigs(
-        configLines.map(config => ({
+        [...configLines.map(config => ({
           config,
           name: extractNameFromConfigUrl(config) || t('subscriptionModal.unknownConfig', { defaultValue: 'Unknown Config' }),
           address: extractAddressFromConfigUrl(config),
-        })),
+          kind: 'link' as const,
+        })), ...native.configs.map(item => ({ config: item.config, name: item.name, address: 'AmneziaWG', kind: 'amneziawg' as const }))],
       )
       setCurrentPage(0)
     } catch (err) {
@@ -170,6 +178,14 @@ const SubscriptionModal: FC<SubscriptionModalProps> = memo(({ open, subscribeUrl
     [t],
   )
 
+  const handleDownloadAmneziaWG = useCallback((item: ConfigItem) => {
+    try {
+      const payload = getAmneziaWGDownloadPayload(item.name, item.config)
+      downloadTextFile(payload.content, payload.fileName, payload.mimeType)
+      toast.success(t('usersTable.downloadStarted', { defaultValue: 'Download started' }))
+    } catch { toast.error(t('downloadFailed', { defaultValue: 'Failed to download config' })) }
+  }, [t])
+
   const handleShowConfigQR = (config: ConfigItem) => {
     if (clearSelectedConfigQrTimeoutRef.current) {
       clearTimeout(clearSelectedConfigQrTimeoutRef.current)
@@ -193,7 +209,9 @@ const SubscriptionModal: FC<SubscriptionModalProps> = memo(({ open, subscribeUrl
   }
 
   const selectedConfigWireGuardDownload = selectedConfigQR ? getWireGuardDownloadPayload(selectedConfigQR.config) : null
-  const selectedConfigQrValue = selectedConfigWireGuardDownload && selectedConfigQrMode === 'config' ? selectedConfigWireGuardDownload.content : selectedConfigQR?.config || ''
+  const selectedConfigQrValue = selectedConfigQR?.kind === 'amneziawg'
+    ? getAmneziaWGQrValue(selectedConfigQR.config)
+    : selectedConfigWireGuardDownload && selectedConfigQrMode === 'config' ? selectedConfigWireGuardDownload.content : selectedConfigQR?.config || ''
 
   return (
     <>
@@ -281,6 +299,11 @@ const SubscriptionModal: FC<SubscriptionModalProps> = memo(({ open, subscribeUrl
                                 <Download className="h-4 w-4" />
                               </Button>
                             )}
+                            {item.kind === 'amneziawg' && (
+                              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleDownloadAmneziaWG(item)} title="Download AmneziaWG .conf" aria-label="Download AmneziaWG .conf">
+                                <Download className="h-4 w-4" />
+                              </Button>
+                            )}
                             <Button
                               variant="ghost"
                               size="icon"
@@ -334,7 +357,7 @@ const SubscriptionModal: FC<SubscriptionModalProps> = memo(({ open, subscribeUrl
             </DialogTitle>
           </DialogHeader>
           <div className="flex flex-col items-center gap-4 py-2">
-            {selectedConfigWireGuardDownload && (
+            {selectedConfigWireGuardDownload && selectedConfigQR?.kind !== 'amneziawg' && (
               <ToggleGroup
                 type="single"
                 value={selectedConfigQrMode}
@@ -384,6 +407,12 @@ const SubscriptionModal: FC<SubscriptionModalProps> = memo(({ open, subscribeUrl
                 >
                   <Download className="h-4 w-4 shrink-0" />
                   {t('configActions.downloadWireGuard', { defaultValue: 'Download WireGuard' })}
+                </Button>
+              )}
+              {selectedConfigQR?.kind === 'amneziawg' && (
+                <Button variant="outline" onClick={() => handleDownloadAmneziaWG(selectedConfigQR)} className={cn('h-auto min-h-11 w-full gap-3 px-3 py-3 text-sm leading-tight whitespace-normal sm:col-span-2', isRTL ? 'flex-row-reverse text-right' : 'justify-start text-left')}>
+                  <Download className="h-4 w-4 shrink-0" />
+                  Download AmneziaWG .conf
                 </Button>
               )}
             </div>

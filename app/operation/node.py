@@ -1,4 +1,6 @@
 import asyncio
+import hashlib
+import json
 from collections.abc import AsyncIterator, Callable
 from typing import ClassVar
 
@@ -74,6 +76,7 @@ from config import runtime_settings
 MAX_MESSAGE_LENGTH = 128
 # Cap parallel start/attach so ~100 nodes don't stampede NATS lifecycle KV.
 CONNECT_CONCURRENCY = 10
+_AWG_CORE_VERSION_PREFIX = "amneziawg-go v3.1.20260814 in-process (1b86b2ae0e493e7ea93f8c1a0f0cb6735b1551f1;"
 
 logger = get_logger("node-operation")
 
@@ -82,6 +85,32 @@ class NodeOperation(BaseOperation):
     # Local Start RPCs in progress on this process. Health checks must not fire a
     # second Start just because pg-node still returns "core is not started yet".
     _in_flight_connects: ClassVar[set[int]] = set()
+
+    @staticmethod
+    def _awg_provenance_fingerprint(db_node: Node) -> str:
+        identity = {
+            "address": db_node.address,
+            "port": db_node.port,
+            "api_port": db_node.api_port,
+            "connection_type": getattr(db_node.connection_type, "value", db_node.connection_type),
+            "server_ca": db_node.server_ca,
+            "api_key": db_node.api_key,
+            # The installer control-identity contract represents an absent
+            # proxy as an empty string. Normalize the persisted nullable value
+            # identically so a managed receipt remains valid after restart.
+            "proxy_url": db_node.proxy_url if db_node.proxy_url is not None else "",
+            "implementation": _AWG_CORE_VERSION_PREFIX,
+        }
+        return hashlib.sha256(
+            json.dumps(identity, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest()
+
+    @staticmethod
+    def _record_awg_provenance(db_node: Node, core_version: str | None) -> bool:
+        if not (core_version or "").startswith(_AWG_CORE_VERSION_PREFIX):
+            return False
+        db_node.awg_provenance_fingerprint = NodeOperation._awg_provenance_fingerprint(db_node)
+        return True
 
     def __init__(self, operator_type: OperatorType):
         super().__init__(operator_type)
@@ -285,6 +314,10 @@ class NodeOperation(BaseOperation):
             ):
                 attached = await NodeOperation._attach_if_running(pg_node, db_node.name)
                 if attached is not None:
+                    if getattr(core, "type", None) == CoreType.gamerkhaan_amneziawg and not NodeOperation._record_awg_provenance(
+                        db_node, attached.core_version
+                    ):
+                        raise NodeAPIError(412, "AmneziaWG target provenance is absent or incompatible; Start was not sent")
                     return attached
                 if state.observed is LifecycleStatus.STARTING:
                     # Another worker is already starting this node right now - don't race
@@ -300,6 +333,29 @@ class NodeOperation(BaseOperation):
         }
         if core.type == CoreType.xray:
             start_kwargs["exclude_inbounds"] = core.exclude_inbound_tags
+
+        if core.type == CoreType.gamerkhaan_amneziawg:
+            # A stopped pinned node cannot advertise its backend. Reuse only
+            # provenance previously observed on this exact control identity.
+            # A running incompatible backend always overrides stored evidence.
+            probe = await pg_node.info()
+            live_verified = (
+                probe is not None
+                and probe.started
+                and NodeOperation._record_awg_provenance(db_node, probe.core_version)
+            )
+            stored_fingerprint = getattr(db_node, "awg_provenance_fingerprint", None)
+            persisted_verified = bool(
+                stored_fingerprint
+                and stored_fingerprint == NodeOperation._awg_provenance_fingerprint(db_node)
+            )
+            if (probe is not None and probe.started and not live_verified) or (
+                not live_verified and not persisted_verified
+            ):
+                raise NodeAPIError(
+                    code=412,
+                    detail="AmneziaWG target provenance is absent or incompatible; Start was not sent",
+                )
 
         if force_start:
             try:
@@ -339,6 +395,12 @@ class NodeOperation(BaseOperation):
                     if old_status == NodeStatus.connected:
                         return None
                     node_version, core_version = await pg_node.get_versions()
+                    if core.type == CoreType.gamerkhaan_amneziawg:
+                        if not NodeOperation._record_awg_provenance(db_node, core_version):
+                            raise NodeAPIError(
+                                code=412,
+                                detail="AmneziaWG target provenance is absent or incompatible; Start was not sent",
+                            )
                     return {
                         "node_id": db_node.id,
                         "status": NodeStatus.connected,
@@ -346,11 +408,20 @@ class NodeOperation(BaseOperation):
                         "xray_version": core_version,
                         "node_version": node_version,
                         "old_status": old_status,
+                        **({"awg_provenance_fingerprint": getattr(db_node, "awg_provenance_fingerprint", None)}
+                    if core.type == CoreType.gamerkhaan_amneziawg else {}),
                     }
             except Exception:
                 pass
 
-        type = service.BackendType.WIREGUARD if core.type == CoreType.wg else service.BackendType.XRAY
+        backend_types = {
+            CoreType.xray: service.BackendType.XRAY,
+            CoreType.wg: service.BackendType.WIREGUARD,
+            CoreType.gamerkhaan_amneziawg: service.BackendType.AMNEZIAWG,
+        }
+        type = backend_types.get(core.type)
+        if type is None:
+            raise NodeAPIError(code=400, detail=f"Unsupported core type {core.type!s}")
         NodeOperation._in_flight_connects.add(db_node.id)
 
         try:
@@ -359,6 +430,13 @@ class NodeOperation(BaseOperation):
             )
             if info is None:
                 return None
+
+            if core.type == CoreType.gamerkhaan_amneziawg:
+                if not NodeOperation._record_awg_provenance(db_node, info.core_version):
+                    raise NodeAPIError(
+                        code=412,
+                        detail="AmneziaWG target provenance is absent or incompatible after Start",
+                    )
 
             log = logger.info if force_start or old_status != NodeStatus.connected else logger.debug
             log(f'Connected to "{db_node.name}" node v{info.node_version}, core run on v{info.core_version}')
@@ -370,6 +448,8 @@ class NodeOperation(BaseOperation):
                 "xray_version": info.core_version,
                 "node_version": info.node_version,
                 "old_status": old_status,
+                **({"awg_provenance_fingerprint": getattr(db_node, "awg_provenance_fingerprint", None)}
+                    if core.type == CoreType.gamerkhaan_amneziawg else {}),
             }
         except NodeAPIError as e:
             if e.code == -4:
@@ -377,7 +457,10 @@ class NodeOperation(BaseOperation):
             if e.code == 409:
                 # Another worker holds the lifecycle lease; try attach once more.
                 attached = await NodeOperation._attach_if_running(pg_node, db_node.name)
-                if attached is not None:
+                if attached is not None and (
+                    core.type != CoreType.gamerkhaan_amneziawg
+                    or NodeOperation._record_awg_provenance(db_node, attached.core_version)
+                ):
                     return {
                         "node_id": db_node.id,
                         "status": NodeStatus.connected,
@@ -385,6 +468,8 @@ class NodeOperation(BaseOperation):
                         "xray_version": attached.core_version,
                         "node_version": attached.node_version,
                         "old_status": old_status,
+                        **({"awg_provenance_fingerprint": getattr(db_node, "awg_provenance_fingerprint", None)}
+                    if core.type == CoreType.gamerkhaan_amneziawg else {}),
                     }
 
                 # A 409 only ever happens while another worker holds a live, unexpired
@@ -403,7 +488,10 @@ class NodeOperation(BaseOperation):
                 # it before reporting an error so a late success is attached instead of
                 # being torn down by the next health-check reconnect.
                 attached = await NodeOperation._attach_if_running(pg_node, db_node.name)
-                if attached is not None:
+                if attached is not None and (
+                    core.type != CoreType.gamerkhaan_amneziawg
+                    or NodeOperation._record_awg_provenance(db_node, attached.core_version)
+                ):
                     logger.debug(f'Attached to "{db_node.name}" after its Start request timed out')
                     return {
                         "node_id": db_node.id,
@@ -412,6 +500,8 @@ class NodeOperation(BaseOperation):
                         "xray_version": attached.core_version,
                         "node_version": attached.node_version,
                         "old_status": old_status,
+                        **({"awg_provenance_fingerprint": getattr(db_node, "awg_provenance_fingerprint", None)}
+                    if core.type == CoreType.gamerkhaan_amneziawg else {}),
                     }
 
             detail = e.detail[:1020] + "..." if len(e.detail) > 1024 else e.detail
@@ -425,6 +515,8 @@ class NodeOperation(BaseOperation):
                 "xray_version": "",
                 "node_version": "",
                 "old_status": old_status,
+                **({"awg_provenance_fingerprint": getattr(db_node, "awg_provenance_fingerprint", None)}
+                    if core.type == CoreType.gamerkhaan_amneziawg else {}),
             }
         finally:
             NodeOperation._in_flight_connects.discard(db_node.id)
@@ -851,6 +943,7 @@ class NodeOperation(BaseOperation):
             message=result.get("message", ""),
             xray_version=result.get("xray_version", ""),
             node_version=result.get("node_version", ""),
+            awg_provenance_fingerprint=result.get("awg_provenance_fingerprint"),
         )
 
         # Send appropriate notification

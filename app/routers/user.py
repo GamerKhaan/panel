@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, Request, status
 from app.db import AsyncSession, get_db
 from app.models.admin import AdminDetails
 from app.models.settings import ConfigFormat
+from app.models.subscription import NativeSubscriptionConfigList
 from app.models.stats import (
     Period,
     UserCountMetric,
@@ -431,6 +432,20 @@ async def get_user_by_id(
     user_id: int, db: AsyncSession = Depends(get_db), admin: AdminDetails = Depends(require_permission("users", "read"))
 ):
     return await user_operator.get_user_by_id(db=db, user_id=user_id, admin=admin)
+
+
+@router.get(
+    "/{user_id}/subscription/amneziawg-configs",
+    response_model=NativeSubscriptionConfigList,
+    responses={403: responses._403, 404: responses._404},
+)
+async def get_user_amneziawg_configs_by_id(
+    user_id: int,
+    db: AsyncSession = Depends(get_db),
+    admin: AdminDetails = Depends(require_permission("users", "read")),
+):
+    """Get exact native AmneziaWG profiles for the dashboard modal."""
+    return await subscription_operator.user_amneziawg_configs_by_id(db, user_id=user_id, admin=admin)
 
 
 @router.get(

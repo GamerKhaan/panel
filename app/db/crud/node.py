@@ -493,6 +493,7 @@ async def update_node_status(
     message: str = "",
     xray_version: str = "",
     node_version: str = "",
+    awg_provenance_fingerprint: str | None = None,
 ) -> Node:
     """
     Updates the status of a node.
@@ -515,6 +516,9 @@ async def update_node_status(
             message=message,
             xray_version=xray_version,
             node_version=node_version,
+            awg_provenance_fingerprint=func.coalesce(
+                awg_provenance_fingerprint, Node.awg_provenance_fingerprint
+            ),
             last_status_change=datetime.now(UTC),
         )
     )
@@ -571,6 +575,9 @@ async def bulk_update_node_status(
             message=bindparam("message"),
             xray_version=bindparam("xray_version"),
             node_version=bindparam("node_version"),
+            awg_provenance_fingerprint=func.coalesce(
+                bindparam("awg_provenance_fingerprint"), Node.awg_provenance_fingerprint
+            ),
             last_status_change=bindparam("now"),
         )
     )
@@ -579,6 +586,7 @@ async def bulk_update_node_status(
     now = datetime.now(UTC)
     for upd in updates:
         upd["now"] = now
+        upd.setdefault("awg_provenance_fingerprint", None)
 
     # Execute using connection-level execute (bypasses ORM, allows bindparam with WHERE)
     conn = await db.connection()

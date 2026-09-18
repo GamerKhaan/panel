@@ -11,13 +11,15 @@ import { ValidationSummary, type ValidationListItem } from '@/features/core-edit
 import type { SectionHeaderAddPulse } from '@/features/core-editor/hooks/use-section-header-add-pulse'
 import { useXrayPersistValidationItems } from '@/features/core-editor/hooks/use-xray-persist-validation-items'
 import { WireGuardCoreEditor } from '@/features/core-editor/components/wg/wireguard-core-editor'
+import { AmneziaWGCoreEditor } from '@/features/core-editor/components/awg/amneziawg-core-editor'
 import { XrayCoreEditor } from '@/features/core-editor/components/xray/xray-core-editor'
 import { profileToPersistedConfig } from '@/features/core-editor/kit/xray-adapter'
 import { getWireGuardPersistConfig } from '@/features/core-editor/kit/wireguard-adapter'
+import { amneziaWGDraftToConfig } from '@/features/core-editor/kit/amneziawg-adapter'
 import { selectCoreEditorHasActualChanges } from '@/features/core-editor/kit/core-editor-change-state'
 import { useCoreEditorStore } from '@/features/core-editor/state/core-editor-store'
-import type { WgCoreSection, XrayCoreSection } from '@/features/core-editor/state/core-editor-store'
-import type { CoreKind } from '@pasarguard/core-kit'
+import type { AwgCoreSection, WgCoreSection, XrayCoreSection } from '@/features/core-editor/state/core-editor-store'
+import type { PanelCoreKind } from '@/features/core-editor/kit/core-kind'
 import { getGetCoreConfigQueryKey, useCreateCoreConfig, useGetCoreConfig, useModifyCoreConfig } from '@/service/api'
 import { queryClient } from '@/utils/query-client'
 import { ArrowLeft } from 'lucide-react'
@@ -28,7 +30,7 @@ import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import useDirDetection from '@/hooks/use-dir-detection'
 
-type LoadingCoreKind = 'xray' | 'wg'
+type LoadingCoreKind = 'xray' | 'wg' | 'awg'
 
 function loadingSectionPageHeaderProps(coreKind?: LoadingCoreKind): { title: string; description?: string } {
   if (coreKind === 'wg') {
@@ -37,6 +39,7 @@ function loadingSectionPageHeaderProps(coreKind?: LoadingCoreKind): { title: str
       description: 'coreEditor.sectionDesc.wgInterface',
     }
   }
+  if (coreKind === 'awg') return { title: 'AmneziaWG Interface', description: 'Native AmneziaWG configuration' }
   if (coreKind === 'xray') {
     return {
       title: 'coreEditor.section.inbounds',
@@ -54,7 +57,7 @@ function CoreEditorLoadingSkeleton({ coreKind }: { coreKind?: LoadingCoreKind })
   const listGridCols = '24px 28px 52px minmax(0,1fr) minmax(0,1fr) minmax(0,1fr) 44px' as const
   const pageHeader = loadingSectionPageHeaderProps(coreKind)
   const neutral = coreKind === undefined
-  const formLike = neutral || coreKind === 'wg'
+  const formLike = neutral || coreKind === 'wg' || coreKind === 'awg'
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-0" aria-busy="true">
@@ -213,7 +216,8 @@ export default function CoreEditorPage() {
 
   useEffect(() => {
     if (isNew) {
-      const k = (searchParams.get('kind') as CoreKind | null) === 'wg' ? 'wg' : 'xray'
+      const requested = searchParams.get('kind') as PanelCoreKind | null
+      const k: PanelCoreKind = requested === 'wg' || requested === 'awg' ? requested : 'xray'
       const currentName = useCoreEditorStore.getState().coreName
       initNew(k, currentName)
     }
@@ -274,6 +278,26 @@ export default function CoreEditorPage() {
     setNameSubmitAttempted(false)
     setSaving(true)
     try {
+      if (kind === 'awg') {
+        const awgState = useCoreEditorStore.getState()
+        const cfg = awgState.monacoDirty ? JSON.parse(awgState.monacoJson) : awgState.awgDraft ? amneziaWGDraftToConfig(awgState.awgDraft) : JSON.parse(awgState.monacoJson)
+        if (isNew) {
+          const res = await createMutation.mutateAsync({ data: { name, type: 'gamerkhaan_amneziawg', config: cfg, exclude_inbound_tags: [], fallbacks_inbound_tags: [] } })
+          toast.success(t('coreConfigModal.createSuccess', { name }))
+          markClean()
+          queryClient.invalidateQueries({ queryKey: ['/api/cores'] })
+          queryClient.invalidateQueries({ queryKey: ['/api/cores/simple'] })
+          navigate(`/nodes/cores/${res.id}`, { replace: true })
+        } else if (validId) {
+          await modifyMutation.mutateAsync({ coreId: numericId, data: { name, type: 'gamerkhaan_amneziawg', config: cfg, exclude_inbound_tags: [], fallbacks_inbound_tags: [] }, params: { restart_nodes: restartNodes } })
+          toast.success(t('coreConfigModal.editSuccess', { name }))
+          markClean()
+          queryClient.invalidateQueries({ queryKey: ['/api/cores'] })
+          queryClient.invalidateQueries({ queryKey: ['/api/cores/simple'] })
+          queryClient.invalidateQueries({ queryKey: getGetCoreConfigQueryKey(numericId) })
+        }
+        return
+      }
       if (kind === 'wg') {
         if (!wgDraft) return
         const result = getWireGuardPersistConfig(wgDraft)
@@ -415,14 +439,14 @@ export default function CoreEditorPage() {
               aria-invalid={showNameRequired}
             />
             <Select
-              value={kind === 'wg' ? 'wg' : 'xray'}
+              value={kind}
               onValueChange={value => {
-                const nextKind = value === 'wg' ? 'wg' : 'xray'
+                const nextKind: PanelCoreKind = value === 'wg' || value === 'awg' ? value : 'xray'
                 if (isNew) {
                   setSearchParams(
                     prev => {
                       const p = new URLSearchParams(prev)
-                      if (nextKind === 'wg') p.set('kind', 'wg')
+                      if (nextKind === 'wg' || nextKind === 'awg') p.set('kind', nextKind)
                       else p.delete('kind')
                       return p
                     },
@@ -439,6 +463,7 @@ export default function CoreEditorPage() {
               <SelectContent>
                 <SelectItem value="xray">Xray</SelectItem>
                 <SelectItem value="wg">WireGuard</SelectItem>
+                <SelectItem value="awg">AmneziaWG</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -460,6 +485,12 @@ export default function CoreEditorPage() {
   )
 
   const sectionHeaderConfig = useMemo(() => {
+    if (kind === 'awg') {
+      const section = activeSection as AwgCoreSection
+      return section === 'interface'
+        ? { title: 'AmneziaWG Interface', description: 'Server interface, key material, addresses, and native AmneziaWG controls.' }
+        : { title: 'AmneziaWG / Advanced', description: 'Lossless JSON view for versioned envelope fields. Apply valid JSON before returning to the form.' }
+    }
     if (kind === 'wg') {
       const section = activeSection as WgCoreSection
       return {
@@ -544,7 +575,7 @@ export default function CoreEditorPage() {
   if (!hydrated && !isNew && validId) {
     return (
       <div className="flex min-h-0 flex-1 flex-col">
-        <CoreEditorLoadingSkeleton coreKind={coreData?.type === 'wg' ? 'wg' : 'xray'} />
+        <CoreEditorLoadingSkeleton coreKind={coreData?.type === 'wg' ? 'wg' : coreData?.type === 'gamerkhaan_amneziawg' ? 'awg' : 'xray'} />
       </div>
     )
   }
@@ -567,7 +598,13 @@ export default function CoreEditorPage() {
         main={
           <div className="space-y-6">
             <ValidationSummary items={preSaveIssues} />
-            {kind === 'wg' ? <WireGuardCoreEditor /> : <XrayCoreEditor headerAddPulse={headerAddPulse} headerAddEpoch={headerAddEpoch} />}
+            {kind === 'awg' ? (
+              <AmneziaWGCoreEditor />
+            ) : kind === 'wg' ? (
+              <WireGuardCoreEditor />
+            ) : (
+              <XrayCoreEditor headerAddPulse={headerAddPulse} headerAddEpoch={headerAddEpoch} />
+            )}
           </div>
         }
         dirty={hasActualChanges}

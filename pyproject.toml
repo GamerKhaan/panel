@@ -39,9 +39,12 @@ dependencies = [
     "uvloop>=0.22.1; sys_platform != 'win32'",
     "aiorwlock>=1.5.0",
     "typer>=0.27.2",
-    "pasarguard-node-bridge>=0.9.1",
+    "pasarguard-node-bridge==0.9.1+awg31.m2",
     "nats-py>=2.15.0",
 ]
+
+[tool.uv.sources]
+pasarguard-node-bridge = { path = "../m2-bridge-source" }
 
 [tool.ruff]
 line-length = 120
