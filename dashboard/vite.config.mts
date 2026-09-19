@@ -17,7 +17,7 @@ export default defineConfig({
   build: {
     outDir: 'build',
     assetsDir: 'statics',
-    emptyOutDir: false,
+    emptyOutDir: true,
     rollupOptions: {
       output: {
         manualChunks(id) {
@@ -157,16 +157,10 @@ export default defineConfig({
     VitePWA({
       registerType: 'prompt',
       injectRegister: false,
-      workbox: {
-        navigateFallback: '/index.html',
-        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
-        // Monaco is loaded lazily in editor dialogs, so its largest chunks
-        // should stay network-fetched instead of bloating the app shell precache.
-        globIgnores: ['statics/editor.api*.js', 'statics/ts.worker*.js'],
-        cleanupOutdatedCaches: false,
-        skipWaiting: false,
-        clientsClaim: false,
-      },
+      // The dashboard no longer registers a PWA service worker. Publish a
+      // same-name self-destroying worker so browsers upgraded from older
+      // releases unregister legacy workers and drop their stale caches.
+      selfDestroying: true,
     }),
   ],
 })

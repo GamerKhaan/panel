@@ -5,6 +5,7 @@ from collections.abc import AsyncIterator, Callable
 from typing import ClassVar
 
 from fastapi import HTTPException
+from packaging.version import InvalidVersion, Version
 from PasarGuardNodeBridge import Health, NodeAPIError, PasarGuardNode
 from PasarGuardNodeBridge.common import service_pb2 as service
 from PasarGuardNodeBridge.storage import LifecycleStatus
@@ -77,6 +78,7 @@ MAX_MESSAGE_LENGTH = 128
 # Cap parallel start/attach so ~100 nodes don't stampede NATS lifecycle KV.
 CONNECT_CONCURRENCY = 10
 _AWG_CORE_VERSION_PREFIX = "amneziawg-go v3.1.20260814 in-process (1b86b2ae0e493e7ea93f8c1a0f0cb6735b1551f1;"
+_MANAGED_AWG_NODE_MIN_VERSION = Version("1.0.1")
 
 logger = get_logger("node-operation")
 
@@ -111,6 +113,16 @@ class NodeOperation(BaseOperation):
             return False
         db_node.awg_provenance_fingerprint = NodeOperation._awg_provenance_fingerprint(db_node)
         return True
+
+    @staticmethod
+    def _supports_managed_awg_transition(node_version: str | None) -> bool:
+        raw = (node_version or "").strip()
+        if raw.lower().startswith("v"):
+            raw = raw[1:]
+        try:
+            return Version(raw) >= _MANAGED_AWG_NODE_MIN_VERSION
+        except InvalidVersion:
+            return False
 
     def __init__(self, operator_type: OperatorType):
         super().__init__(operator_type)
@@ -349,8 +361,11 @@ class NodeOperation(BaseOperation):
                 stored_fingerprint
                 and stored_fingerprint == NodeOperation._awg_provenance_fingerprint(db_node)
             )
-            if (probe is not None and probe.started and not live_verified) or (
-                not live_verified and not persisted_verified
+            managed_transition = bool(
+                probe is not None and NodeOperation._supports_managed_awg_transition(getattr(probe, "node_version", None))
+            )
+            if (probe is not None and probe.started and not live_verified and not managed_transition) or (
+                not live_verified and not persisted_verified and not managed_transition
             ):
                 raise NodeAPIError(
                     code=412,
