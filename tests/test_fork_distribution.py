@@ -88,14 +88,15 @@ class ForkDistributionTests(unittest.TestCase):
             self.assertNotIn("hasNodeVersionUpdate = !isWireGuardCore", source)
             self.assertNotIn("{!isWireGuardCore && latestNodeVersion", source)
 
-    def test_dashboard_layout_does_not_mount_donation_popup(self):
+    def test_dashboard_layout_keeps_upstream_advertising_structure(self):
         layout = (ROOT / "dashboard/src/pages/_dashboard.tsx").read_text()
-        self.assertNotIn("DonationPopup", layout)
-        self.assertNotIn("donation-popup", layout)
+        self.assertIn("import DonationPopup from '@/components/common/donation-popup'", layout)
+        self.assertIn("<DonationPopup />", layout)
+        self.assertIn("<TopbarAd />", layout)
 
-    def test_dashboard_build_retires_legacy_service_worker_and_cleans_output(self):
+    def test_dashboard_build_retires_legacy_service_worker_with_minimal_upstream_diff(self):
         vite = (ROOT / "dashboard/vite.config.mts").read_text()
-        self.assertIn("emptyOutDir: true", vite)
+        self.assertIn("emptyOutDir: false", vite)
         self.assertIn("selfDestroying: true", vite)
         self.assertIn("injectRegister: false", vite)
         self.assertNotIn("cleanupOutdatedCaches: false", vite)
