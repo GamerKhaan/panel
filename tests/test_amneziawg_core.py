@@ -123,6 +123,29 @@ async def test_stopped_awg_restarts_only_with_matching_control_identity_attestat
     pg_node.start.assert_awaited_once()
 
 
+@pytest.mark.asyncio
+async def test_managed_node_can_bootstrap_first_awg_transition() -> None:
+    db_node = attested_node()
+    started = SimpleNamespace(
+        started=True,
+        core_version="amneziawg-go v3.1.20260814 in-process (1b86b2ae0e493e7ea93f8c1a0f0cb6735b1551f1; exact)",
+        node_version="1.0.1",
+    )
+    pg_node = SimpleNamespace(
+        get_lifecycle_state=AsyncMock(return_value=None),
+        info=AsyncMock(
+            return_value=SimpleNamespace(started=True, core_version="26.9.9", node_version="1.0.1")
+        ),
+        start=AsyncMock(return_value=started),
+    )
+    core = SimpleNamespace(type=CoreType.gamerkhaan_amneziawg, to_str=lambda: "{}")
+
+    result = await NodeOperation._start_or_attach_node(pg_node, db_node, core, [], backend_type=2)
+
+    assert result is started
+    pg_node.start.assert_awaited_once()
+
+
 @pytest.mark.parametrize("field,value", [
     ("address", "192.0.2.11"), ("port", 63050), ("api_port", 63051),
     ("connection_type", "rest"), ("server_ca", "other-ca"),

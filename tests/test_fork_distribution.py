@@ -79,6 +79,29 @@ class ForkDistributionTests(unittest.TestCase):
         self.assertNotIn("t.me/Pasar_Guard", goal_progress)
         self.assertNotIn("donate.pasarguard.org", goal_progress)
 
+    def test_node_release_badge_is_not_suppressed_for_wireguard_backends(self):
+        for relative_path in (
+            "dashboard/src/features/nodes/components/node.tsx",
+            "dashboard/src/features/nodes/components/use-node-list-columns.tsx",
+        ):
+            source = (ROOT / relative_path).read_text()
+            self.assertNotIn("hasNodeVersionUpdate = !isWireGuardCore", source)
+            self.assertNotIn("{!isWireGuardCore && latestNodeVersion", source)
+
+    def test_dashboard_layout_does_not_mount_donation_popup(self):
+        layout = (ROOT / "dashboard/src/pages/_dashboard.tsx").read_text()
+        self.assertNotIn("DonationPopup", layout)
+        self.assertNotIn("donation-popup", layout)
+
+    def test_dashboard_build_retires_legacy_service_worker_and_cleans_output(self):
+        vite = (ROOT / "dashboard/vite.config.mts").read_text()
+        self.assertIn("emptyOutDir: true", vite)
+        self.assertIn("selfDestroying: true", vite)
+        self.assertIn("injectRegister: false", vite)
+        self.assertNotIn("cleanupOutdatedCaches: false", vite)
+        self.assertNotIn("skipWaiting: false", vite)
+        self.assertNotIn("clientsClaim: false", vite)
+
     def test_dashboard_runtime_has_no_pasarguard_github_control_plane(self):
         forbidden = (
             "https://github.com/PasarGuard",
